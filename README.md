@@ -53,6 +53,24 @@ ads are public. Everything else is server-only (service role).
 
 ## Build phases
 
-See `PROJECT_SPEC.md §15`. **Phase 1 (Foundation)** is done: Next.js +
-Supabase + admin auth. Next up: Phase 2 (admin dashboard — credentials vault &
-AI settings).
+All 9 phases (`PROJECT_SPEC.md §15`) are built:
+
+1. **Foundation** — Next.js 16, Supabase, admin auth (`proxy.ts` guard)
+2. **Admin dashboard** — encrypted credentials vault (+ Test), per-step AI
+   model settings, feature toggles, cost control
+3. **Multi-provider AI layer** — Claude / OpenAI / Gemini text, Imagen / DALL·E
+   image (`src/lib/ai`)
+4. **Agent pipeline** — 7-step daily workflow (`src/lib/agent`), hybrid Telugu,
+   slug rules, image → Supabase Storage
+5. **Article review** — drafts list, edit, publish/unpublish, Telegram approval
+   (`/api/telegram/webhook`)
+6. **Public blog** — home, `/[slug]`, categories, authors, NewsArticle/Person/
+   Organization schema, `max-image-preview:large`, sitemap, RSS, mandatory
+   pages, Telugu fonts
+7. **Analytics** — GA4, Search Console verification, honest winner analysis
+8. **Ads manager** — CRUD, category matching, click tracking
+9. **Deploy** — `ecosystem.config.js`, `deploy/nginx.conf`, `DEPLOYMENT.md`,
+   cron trigger (`/api/cron/generate`)
+
+**To go live:** add API keys in Admin → Credentials, then Articles → *Generate
+now*. See [`DEPLOYMENT.md`](DEPLOYMENT.md) for EC2 + Cloudflare.

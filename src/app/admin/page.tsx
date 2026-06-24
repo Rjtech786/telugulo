@@ -78,9 +78,11 @@ export default async function AdminOverview() {
       </div>
 
       <div className="rounded-2xl border border-dashed border-neutral-300 bg-white/50 p-6 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/50">
-        Phase 1 (Foundation) ✓ — Next.js + Supabase + admin auth wired up. Next
-        phases add: credentials vault, per-step AI settings, the 7-step agent
-        pipeline, article review, and the public Discover-optimized blog.
+        All phases built. To go live: add your API keys in{" "}
+        <a href="/admin/credentials" className="underline">Credentials</a>, tune{" "}
+        <a href="/admin/settings" className="underline">AI Settings</a>, then hit{" "}
+        <a href="/admin/articles" className="underline">Generate now</a> to create
+        the first draft. Review &amp; publish — it appears on the public blog.
       </div>
     </div>
   );
