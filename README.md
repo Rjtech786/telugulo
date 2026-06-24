@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# telugulo-next
 
-## Getting Started
+AI tech-news blog platform for **telugulo.in** — Next.js 16 + Supabase.
+Full spec: [`../PROJECT_SPEC.md`](../PROJECT_SPEC.md).
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- Next.js 16 (App Router, Turbopack) + TypeScript + Tailwind v4
+- Supabase (dedicated project `ofusghtmlbhikrohtskm`, region ap-south-1) —
+  DB + Auth + Storage
+- Supabase Auth for the admin dashboard (`/admin`)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+> The Supabase project is **separate** from the ApnaBot project — no shared
+> data.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Local setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Install deps:
 
-## Learn More
+   ```bash
+   npm install
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+2. `.env.local` is already created with the Supabase URL, anon key and an
+   encryption key. Add the **service role key** (Supabase dashboard → telugulo
+   project → Project Settings → API → `service_role`):
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+   ```
+   SUPABASE_SERVICE_ROLE_KEY=...
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+3. Create the admin login:
 
-## Deploy on Vercel
+   ```bash
+   node scripts/create-admin.mjs you@email.com yourpassword
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+4. Run the dev server:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+   ```bash
+   npm run dev
+   ```
+
+   - Public site: http://localhost:3000
+   - Admin: http://localhost:3000/admin (redirects to `/login`)
+
+## Database
+
+Schema migration lives in [`supabase/migrations/`](supabase/migrations).
+Tables: `articles`, `authors`, `settings`, `api_keys` (encrypted), `ads`,
+`performance_insights`. RLS is on; only published articles / authors / active
+ads are public. Everything else is server-only (service role).
+
+## Build phases
+
+See `PROJECT_SPEC.md §15`. **Phase 1 (Foundation)** is done: Next.js +
+Supabase + admin auth. Next up: Phase 2 (admin dashboard — credentials vault &
+AI settings).
