@@ -1,0 +1,155 @@
+/**
+ * Shared dashboard config: pipeline steps, AI providers/models, credential
+ * fields, feature toggles, and defaults. Pure constants — safe to import in
+ * both Server and Client Components (no secrets here).
+ */
+
+// ─── Text AI providers + their selectable models ───
+export type TextProvider = "claude" | "openai" | "gemini";
+
+export const TEXT_PROVIDERS: { id: TextProvider; label: string }[] = [
+  { id: "claude", label: "Claude (Anthropic)" },
+  { id: "openai", label: "OpenAI" },
+  { id: "gemini", label: "Gemini (Google)" },
+];
+
+export const TEXT_MODELS: Record<
+  TextProvider,
+  { id: string; label: string; tier: "cheap" | "medium" | "quality" }[]
+> = {
+  claude: [
+    { id: "claude-haiku-4-5", label: "Haiku 4.5 — cheap", tier: "cheap" },
+    { id: "claude-sonnet-4-6", label: "Sonnet 4.6 — medium", tier: "medium" },
+    { id: "claude-opus-4-8", label: "Opus 4.8 — quality", tier: "quality" },
+  ],
+  openai: [
+    { id: "gpt-4o-mini", label: "GPT-4o mini — cheap", tier: "cheap" },
+    { id: "gpt-4o", label: "GPT-4o — medium", tier: "medium" },
+    { id: "gpt-4.1", label: "GPT-4.1 — quality", tier: "quality" },
+  ],
+  gemini: [
+    { id: "gemini-2.5-flash", label: "2.5 Flash — cheap", tier: "cheap" },
+    { id: "gemini-2.5-pro", label: "2.5 Pro — quality", tier: "quality" },
+  ],
+};
+
+// ─── Image AI providers ───
+export type ImageProvider = "imagen" | "dalle";
+export const IMAGE_PROVIDERS: { id: ImageProvider; label: string }[] = [
+  { id: "imagen", label: "Imagen (Google)" },
+  { id: "dalle", label: "DALL·E (OpenAI)" },
+];
+
+// ─── 7-step agent pipeline + extra agents (spec §4, §8.3) ───
+export type StepKey =
+  | "khoj"
+  | "chunaav"
+  | "research"
+  | "angle"
+  | "writing"
+  | "self_check"
+  | "learning"
+  | "performance"
+  | "ads";
+
+export const PIPELINE_STEPS: {
+  key: StepKey;
+  label: string;
+  hint: string;
+  defaultProvider: TextProvider;
+  defaultModel: string;
+}[] = [
+  { key: "khoj", label: "Khoj (discovery)", hint: "simple — list topics", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
+  { key: "chunaav", label: "Chunaav (selection)", hint: "simple judgement", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
+  { key: "research", label: "Research", hint: "summarizing sources", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
+  { key: "angle", label: "Angle", hint: "needs some thinking", defaultProvider: "claude", defaultModel: "claude-sonnet-4-6" },
+  { key: "writing", label: "Writing", hint: "THE real work — quality = traffic", defaultProvider: "claude", defaultModel: "claude-opus-4-8" },
+  { key: "self_check", label: "Self-check", hint: "editorial review", defaultProvider: "claude", defaultModel: "claude-sonnet-4-6" },
+  { key: "learning", label: "Learning agent", hint: "data analysis", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
+  { key: "performance", label: "Performance analysis", hint: "pattern finding", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
+  { key: "ads", label: "Ads placement", hint: "simple decision", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
+];
+
+// ─── Credential providers stored (encrypted) in api_keys (spec §8.2) ───
+export type CredentialProvider =
+  | "claude"
+  | "openai"
+  | "gemini"
+  | "imagen"
+  | "dalle"
+  | "telegram_token"
+  | "telegram_chat";
+
+export const CREDENTIALS: {
+  provider: CredentialProvider;
+  label: string;
+  hint: string;
+  testable: boolean;
+}[] = [
+  { provider: "claude", label: "Claude API key", hint: "Anthropic — sk-ant-…", testable: true },
+  { provider: "openai", label: "OpenAI API key", hint: "OpenAI — sk-…", testable: true },
+  { provider: "gemini", label: "Gemini API key", hint: "Google AI Studio", testable: true },
+  { provider: "imagen", label: "Imagen API key", hint: "Google (often same as Gemini)", testable: true },
+  { provider: "dalle", label: "DALL·E key", hint: "optional — OpenAI key", testable: true },
+  { provider: "telegram_token", label: "Telegram Bot Token", hint: "from @BotFather", testable: true },
+  { provider: "telegram_chat", label: "Telegram Chat ID", hint: "from @userinfobot", testable: true },
+];
+
+// ─── Feature toggles (spec §8.3b) ───
+export type FeatureKey =
+  | "article_generation"
+  | "image_generation"
+  | "telegram_notifications"
+  | "learning_agent"
+  | "performance_analysis"
+  | "ads_manager";
+
+export const FEATURES: {
+  key: FeatureKey;
+  label: string;
+  hint: string;
+  default: boolean;
+}[] = [
+  { key: "article_generation", label: "Article generation", hint: "core — daily AI articles", default: true },
+  { key: "image_generation", label: "Image generation", hint: "needed for Discover", default: true },
+  { key: "telegram_notifications", label: "Telegram notifications", hint: "draft approval", default: true },
+  { key: "learning_agent", label: "Learning agent", hint: "learns from your edits", default: true },
+  { key: "performance_analysis", label: "Performance analysis", hint: "turn on after data builds", default: false },
+  { key: "ads_manager", label: "Ads manager", hint: "turn on after traffic builds", default: false },
+];
+
+// ─── General + cost settings (spec §8.3, §8.4) ───
+export type GeneralSettings = {
+  articles_per_day: 1 | 2;
+  tone: "friendly" | "professional" | "casual";
+  article_length: number; // 400–1500 words
+  publish_time: string; // "HH:MM" IST
+};
+
+export const DEFAULT_GENERAL: GeneralSettings = {
+  articles_per_day: 1,
+  tone: "friendly",
+  article_length: 900,
+  publish_time: "06:00",
+};
+
+export type CostSettings = {
+  monthly_budget: number; // ₹
+  learning_examples_limit: number;
+  performance_frequency: "weekly" | "monthly";
+};
+
+export const DEFAULT_COST: CostSettings = {
+  monthly_budget: 500,
+  learning_examples_limit: 3,
+  performance_frequency: "weekly",
+};
+
+// Settings table keys
+export const SETTINGS_KEYS = {
+  models: "ai_models",
+  imageProvider: "image_provider",
+  features: "features",
+  general: "general",
+  cost: "cost",
+} as const;
