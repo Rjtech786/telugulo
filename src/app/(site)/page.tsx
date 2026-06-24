@@ -2,9 +2,34 @@ import Link from "next/link";
 import { listPublished, type PublicArticle } from "@/lib/public";
 import { ArticleCard, CategoryBadge } from "@/components/article-card";
 import { Thumb } from "@/components/thumb";
-import { formatDate, categoryLabel } from "@/lib/site";
+import { formatDate, categoryLabel, SITE } from "@/lib/site";
 
 export const revalidate = 300;
+
+const siteJsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": `${SITE.url}/#website`,
+      name: SITE.name,
+      url: `${SITE.url}/`,
+      description: SITE.description,
+      inLanguage: "te",
+      publisher: { "@id": `${SITE.url}/#organization` },
+    },
+    {
+      "@type": "Organization",
+      "@id": `${SITE.url}/#organization`,
+      name: SITE.organization.name,
+      url: `${SITE.url}/`,
+      logo: {
+        "@type": "ImageObject",
+        url: `${SITE.url}${SITE.organization.logo}`,
+      },
+    },
+  ],
+};
 
 export default async function HomePage() {
   const articles = await listPublished(30);
@@ -29,6 +54,10 @@ export default async function HomePage() {
 
   return (
     <div className="py-1">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
+      />
       <HeroStrip />
 
       {/* Featured */}

@@ -9,7 +9,7 @@ export const SITE = {
   locale: "te_IN",
   organization: {
     name: "telugulo.in",
-    logo: "/icon.png",
+    logo: "/opengraph-image",
   },
 } as const;
 

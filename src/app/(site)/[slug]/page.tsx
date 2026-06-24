@@ -62,24 +62,45 @@ export default async function ArticlePage({
   const author = a.author_id ? await getAuthor(a.author_id) : null;
   const url = `${SITE.url}/${a.slug}/`;
 
+  const breadcrumb = [
+    { name: "Home", item: `${SITE.url}/` },
+    ...(a.category
+      ? [{ name: a.category, item: `${SITE.url}/category/${a.category}/` }]
+      : []),
+    { name: a.title, item: url },
+  ];
+
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "NewsArticle",
-    headline: a.title,
-    description: a.meta_description || a.summary || undefined,
-    image: a.image_url ? [a.image_url] : undefined,
-    datePublished: a.published_at || a.created_at,
-    dateModified: a.published_at || a.created_at,
-    mainEntityOfPage: { "@type": "WebPage", "@id": url },
-    author: author
-      ? { "@type": "Person", name: author.name, url: author.slug ? `${SITE.url}/author/${author.slug}` : undefined }
-      : { "@type": "Organization", name: SITE.name },
-    publisher: {
-      "@type": "Organization",
-      name: SITE.organization.name,
-      logo: { "@type": "ImageObject", url: `${SITE.url}${SITE.organization.logo}` },
-    },
-    inLanguage: "te",
+    "@graph": [
+      {
+        "@type": "NewsArticle",
+        headline: a.title,
+        description: a.meta_description || a.summary || undefined,
+        image: a.image_url ? [a.image_url] : undefined,
+        datePublished: a.published_at || a.created_at,
+        dateModified: a.published_at || a.created_at,
+        mainEntityOfPage: { "@type": "WebPage", "@id": url },
+        author: author
+          ? { "@type": "Person", name: author.name, url: author.slug ? `${SITE.url}/author/${author.slug}/` : undefined }
+          : { "@type": "Organization", name: SITE.name },
+        publisher: {
+          "@type": "Organization",
+          name: SITE.organization.name,
+          logo: { "@type": "ImageObject", url: `${SITE.url}${SITE.organization.logo}` },
+        },
+        inLanguage: "te",
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: breadcrumb.map((b, i) => ({
+          "@type": "ListItem",
+          position: i + 1,
+          name: b.name,
+          item: b.item,
+        })),
+      },
+    ],
   };
 
   return (
