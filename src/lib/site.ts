@@ -28,12 +28,12 @@ export function categoryLabel(slug: string | null): string {
 }
 
 export const FOOTER_PAGES: { href: string; label: string }[] = [
-  { href: "/about", label: "మా గురించి" },
-  { href: "/contact", label: "సంప్రదించండి" },
-  { href: "/privacy", label: "ప్రైవసీ" },
-  { href: "/disclaimer", label: "నిరాకరణ" },
-  { href: "/terms", label: "నిబంధనలు" },
-  { href: "/editorial-policy", label: "సంపాదకీయ విధానం" },
+  { href: "/about", label: "About" },
+  { href: "/contact", label: "Contact" },
+  { href: "/privacy", label: "Privacy Policy" },
+  { href: "/disclaimer", label: "Disclaimer" },
+  { href: "/terms", label: "Terms" },
+  { href: "/editorial-policy", label: "Editorial Policy" },
 ];
 
 // Colourful gradient placeholders for articles without a featured image
