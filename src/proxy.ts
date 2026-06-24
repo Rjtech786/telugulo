@@ -58,8 +58,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Run on everything except static assets and image files.
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
-  ],
+  // Only guard the admin area + login. Public blog pages skip the session
+  // check entirely (faster, fully cacheable for Discover/SEO).
+  matcher: ["/admin/:path*", "/login"],
 };
