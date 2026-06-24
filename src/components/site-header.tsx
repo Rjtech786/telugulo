@@ -21,21 +21,41 @@ export function SiteHeader() {
           </span>
         </Link>
 
+        {/* Desktop nav */}
         <nav className="hidden gap-6 text-sm text-ink-soft sm:flex">
-          <Link href="/" className="transition hover:text-accent">
+          <Link href="/" className="py-1 transition hover:text-accent">
             హోమ్
           </Link>
           {NAV.map((c) => (
             <Link
               key={c.slug}
               href={`/category/${c.slug}`}
-              className="transition hover:text-accent"
+              className="py-1 transition hover:text-accent"
             >
               {c.label}
             </Link>
           ))}
         </nav>
       </div>
+
+      {/* Mobile nav — horizontally scrollable category chips */}
+      <nav className="flex gap-2 overflow-x-auto border-t border-line px-4 py-2 sm:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        <Link
+          href="/"
+          className="whitespace-nowrap rounded-full bg-accent-soft px-3 py-1.5 text-sm font-medium text-accent"
+        >
+          హోమ్
+        </Link>
+        {CATEGORIES.map((c) => (
+          <Link
+            key={c.slug}
+            href={`/category/${c.slug}`}
+            className="whitespace-nowrap rounded-full bg-surface px-3 py-1.5 text-sm text-ink-soft"
+          >
+            {c.label}
+          </Link>
+        ))}
+      </nav>
     </header>
   );
 }

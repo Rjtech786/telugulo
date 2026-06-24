@@ -8,13 +8,13 @@ export function SiteFooter() {
         <div className="text-[13px] text-ink-soft">
           © {new Date().getFullYear()} {SITE.name} · {SITE.tagline}
         </div>
-        <div className="flex flex-wrap gap-4 text-[13px] text-ink-soft">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-ink-soft">
           {FOOTER_PAGES.map((p) => (
-            <Link key={p.href} href={p.href} className="hover:text-accent">
+            <Link key={p.href} href={p.href} className="py-1 hover:text-accent">
               {p.label}
             </Link>
           ))}
-          <Link href="/feed.xml" className="hover:text-accent">
+          <Link href="/feed.xml" className="py-1 hover:text-accent">
             RSS
           </Link>
         </div>
