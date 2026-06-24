@@ -1,11 +1,17 @@
+import Link from "next/link";
 import { getTopArticles, listInsights } from "@/lib/insights";
+import { getIntegrations } from "@/lib/settings";
 import { RunAnalysis } from "./RunAnalysis";
 
 export const dynamic = "force-dynamic";
 
 export default async function AnalyticsPage() {
-  const [top, insights] = await Promise.all([getTopArticles(10), listInsights(5)]);
-  const gaConfigured = Boolean(process.env.NEXT_PUBLIC_GA_ID);
+  const [top, insights, integrations] = await Promise.all([
+    getTopArticles(10),
+    listInsights(5),
+    getIntegrations().catch(() => null),
+  ]);
+  const gaConfigured = Boolean(integrations?.ga_id);
 
   return (
     <div className="space-y-6">
@@ -22,12 +28,13 @@ export default async function AnalyticsPage() {
         {gaConfigured ? (
           <span className="text-green-600 dark:text-green-400">connected ✓</span>
         ) : (
-          <span className="text-amber-600">
-            not set — add <code>NEXT_PUBLIC_GA_ID</code> to <code>.env.local</code>
-          </span>
+          <span className="text-amber-600">not set</span>
         )}
-        . Search Console: add <code>NEXT_PUBLIC_GSC_VERIFICATION</code> + submit{" "}
-        <code>/sitemap.xml</code>.
+        . Add GA, Search Console &amp; AdSense codes in{" "}
+        <Link href="/admin/integrations" className="underline">
+          Integrations
+        </Link>
+        , then submit <code>/sitemap.xml</code> in Search Console.
       </div>
 
       <section className="space-y-2">

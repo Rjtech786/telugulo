@@ -145,6 +145,21 @@ export const DEFAULT_COST: CostSettings = {
   performance_frequency: "weekly",
 };
 
+// ─── Site integrations / head codes (spec §7, §10 — GSC/Analytics/AdSense) ───
+export type Integrations = {
+  ga_id: string; // GA4 Measurement ID, e.g. G-XXXXXXX
+  gsc_verification: string; // Search Console meta verification code
+  adsense_id: string; // AdSense publisher id, e.g. ca-pub-1234567890
+  head_html: string; // any extra raw <head> code (pixels, verifications…)
+};
+
+export const DEFAULT_INTEGRATIONS: Integrations = {
+  ga_id: "",
+  gsc_verification: "",
+  adsense_id: "",
+  head_html: "",
+};
+
 // Settings table keys
 export const SETTINGS_KEYS = {
   models: "ai_models",
@@ -152,4 +167,5 @@ export const SETTINGS_KEYS = {
   features: "features",
   general: "general",
   cost: "cost",
+  integrations: "integrations",
 } as const;

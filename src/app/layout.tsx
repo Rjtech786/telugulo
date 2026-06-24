@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Noto_Sans_Telugu } from "next/font/google";
 import "./globals.css";
 import { SITE } from "@/lib/site";
-import { Analytics } from "@/components/analytics";
+import { SiteHead } from "@/components/site-head";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -64,11 +64,10 @@ export default function RootLayout({
             <link rel="dns-prefetch" href={supabaseOrigin} />
           </>
         )}
+        {/* Owner-configured head codes: GA / Search Console / AdSense / custom */}
+        <SiteHead />
       </head>
-      <body className="min-h-full flex flex-col font-sans">
-        {children}
-        <Analytics />
-      </body>
+      <body className="min-h-full flex flex-col font-sans">{children}</body>
     </html>
   );
 }

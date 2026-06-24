@@ -12,6 +12,7 @@ import {
   type FeatureKey,
   type GeneralSettings,
   type CostSettings,
+  type Integrations,
 } from "@/lib/config";
 
 /**
@@ -83,4 +84,20 @@ export async function getCost(): Promise<CostSettings> {
     SETTINGS_KEYS.cost,
   )) ?? {};
   return { ...DEFAULT_COST, ...saved };
+}
+
+/**
+ * Site integrations (GA4 / Search Console / AdSense / custom head code).
+ * Falls back to env vars for GA/GSC so existing setups keep working.
+ */
+export async function getIntegrations(): Promise<Integrations> {
+  const saved =
+    (await readSetting<Partial<Integrations>>(SETTINGS_KEYS.integrations)) ?? {};
+  return {
+    ga_id: saved.ga_id || process.env.NEXT_PUBLIC_GA_ID || "",
+    gsc_verification:
+      saved.gsc_verification || process.env.NEXT_PUBLIC_GSC_VERIFICATION || "",
+    adsense_id: saved.adsense_id || "",
+    head_html: saved.head_html || "",
+  };
 }
