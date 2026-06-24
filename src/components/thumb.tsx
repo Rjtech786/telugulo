@@ -20,6 +20,10 @@ export function Thumb({
   sizes?: string;
   priority?: boolean;
 }) {
+  // Supabase-hosted images get optimized (AVIF/WebP); pasted external URLs are
+  // served as-is so any image host works without an allowlist entry.
+  const external = src ? !src.includes(".supabase.co/storage/") : false;
+
   return (
     <div className={`relative overflow-hidden ${className}`}>
       {src ? (
@@ -29,6 +33,7 @@ export function Thumb({
           fill
           sizes={sizes ?? "100vw"}
           priority={priority}
+          unoptimized={external}
           className="object-cover"
         />
       ) : (
