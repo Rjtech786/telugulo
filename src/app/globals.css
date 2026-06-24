@@ -27,6 +27,8 @@
 
   /* Latin glyphs from Geist, Telugu glyphs fall back to Noto Sans Telugu. */
   --font-sans: var(--font-geist-sans), var(--font-telugu), system-ui, sans-serif;
+  /* Telugu serif headlines (editorial). Latin falls back to Georgia. */
+  --font-serif: var(--font-telugu-serif), Georgia, "Times New Roman", serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
@@ -36,4 +38,12 @@ body {
   font-family: var(--font-sans);
   line-height: 1.7;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Balanced, tighter headline wrapping. */
+h1,
+h2,
+h3 {
+  text-wrap: balance;
 }

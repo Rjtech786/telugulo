@@ -37,26 +37,26 @@ export default async function HomePage() {
       >
         <Link
           href={`/${featured.slug}`}
-          className="group overflow-hidden rounded-xl border border-line bg-white"
+          className="group overflow-hidden rounded-2xl border border-line bg-white transition duration-200 hover:border-neutral-300 hover:shadow-[0_12px_28px_rgba(0,0,0,0.08)] [&_img]:transition-transform [&_img]:duration-500 hover:[&_img]:scale-105"
         >
           <Thumb
             src={featured.image_url}
             alt={featured.title}
             seed={featured.id}
-            className="h-[280px] w-full"
+            className="h-[300px] w-full"
             sizes="(max-width: 840px) 100vw, 600px"
             priority
           />
-          <div className="px-5 pb-5 pt-4">
+          <div className="p-6">
             <CategoryBadge slug={featured.category} />
-            <h2 className="mt-2.5 text-[23px] font-bold leading-snug tracking-tight text-ink">
+            <h2 className="mt-3 font-serif text-[26px] font-bold leading-tight text-ink transition-colors group-hover:text-accent">
               {featured.title}
             </h2>
             {featured.summary && (
-              <p className="mt-2 text-sm text-ink-soft">{featured.summary}</p>
+              <p className="mt-2.5 leading-relaxed text-ink-soft">{featured.summary}</p>
             )}
-            <div className="mt-3 text-xs text-ink-mute">
-              ✍️ telugulo team · {formatDate(featured.published_at)}
+            <div className="mt-4 text-xs font-medium text-ink-mute">
+              telugulo team · {formatDate(featured.published_at)}
             </div>
           </div>
         </Link>
@@ -71,7 +71,7 @@ export default async function HomePage() {
       </div>
 
       {/* Latest grid */}
-      <h2 className="mb-5 inline-block border-b-2 border-ink pb-2 text-base font-bold text-ink">
+      <h2 className="mb-6 inline-block border-b-[3px] border-accent pb-2 font-serif text-xl font-bold text-ink">
         తాజా వార్తలు
       </h2>
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -98,7 +98,7 @@ function SideItem({ a }: { a: PublicArticle }) {
   return (
     <Link
       href={`/${a.slug}`}
-      className="flex gap-3 border-b border-line pb-4 last:border-0 last:pb-0"
+      className="group flex gap-3 border-b border-line pb-4 last:border-0 last:pb-0"
     >
       <Thumb
         src={a.image_url}
@@ -108,10 +108,10 @@ function SideItem({ a }: { a: PublicArticle }) {
         sizes="84px"
       />
       <div className="min-w-0">
-        <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-ink">
+        <h3 className="line-clamp-2 font-serif text-[15px] font-bold leading-snug text-ink transition-colors group-hover:text-accent">
           {a.title}
         </h3>
-        <div className="mt-1 text-[11px] text-ink-mute">
+        <div className="mt-1.5 text-[11px] font-medium text-ink-mute">
           {categoryLabel(a.category)} · {formatDate(a.published_at)}
         </div>
       </div>

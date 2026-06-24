@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Noto_Sans_Telugu } from "next/font/google";
+import { Geist, Noto_Sans_Telugu, Noto_Serif_Telugu } from "next/font/google";
 import "./globals.css";
 import { SITE } from "@/lib/site";
 import { SiteHead } from "@/components/site-head";
@@ -10,10 +10,18 @@ const geistSans = Geist({
   display: "swap",
 });
 
-// Proper Telugu script rendering across the site.
+// Telugu body text.
 const notoTelugu = Noto_Sans_Telugu({
   variable: "--font-telugu",
   subsets: ["telugu"],
+  display: "swap",
+});
+
+// Telugu serif for headlines — editorial / news feel.
+const notoSerifTelugu = Noto_Serif_Telugu({
+  variable: "--font-telugu-serif",
+  subsets: ["telugu"],
+  weight: ["600", "700"],
   display: "swap",
 });
 
@@ -54,7 +62,7 @@ export default function RootLayout({
   return (
     <html
       lang="te"
-      className={`${geistSans.variable} ${notoTelugu.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${notoTelugu.variable} ${notoSerifTelugu.variable} h-full antialiased`}
     >
       <head>
         {/* Warm up the connection to Supabase Storage for faster image LCP. */}

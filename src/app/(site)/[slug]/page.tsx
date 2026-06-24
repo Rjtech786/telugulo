@@ -107,7 +107,7 @@ export default async function ArticlePage({
         )}
       </div>
 
-      <h1 className="mt-4 text-[32px] font-bold leading-tight tracking-tight text-ink">
+      <h1 className="mt-4 font-serif text-[34px] font-bold leading-[1.2] text-ink sm:text-[40px]">
         {a.title}
       </h1>
 

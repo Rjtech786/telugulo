@@ -15,24 +15,28 @@ export function ArticleCard({ a }: { a: PublicArticle }) {
   return (
     <Link
       href={`/${a.slug}`}
-      className="group block overflow-hidden rounded-xl border border-line bg-white transition hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]"
+      className="group block overflow-hidden rounded-xl border border-line bg-white transition duration-200 hover:-translate-y-1 hover:border-neutral-300 hover:shadow-[0_12px_28px_rgba(0,0,0,0.08)] [&_img]:transition-transform [&_img]:duration-500 hover:[&_img]:scale-105"
     >
       <Thumb
         src={a.image_url}
         alt={a.title}
         seed={a.id}
-        className="h-[150px] w-full"
+        className="h-[160px] w-full"
         sizes="(max-width: 560px) 100vw, (max-width: 840px) 50vw, 320px"
       />
-      <div className="px-4 pb-4 pt-3.5">
+      <div className="p-4">
         <CategoryBadge slug={a.category} />
-        <h3 className="mt-2 line-clamp-2 text-base font-semibold leading-snug text-ink">
+        <h3 className="mt-2.5 line-clamp-2 font-serif text-[17px] font-bold leading-snug text-ink transition-colors group-hover:text-accent">
           {a.title}
         </h3>
         {a.summary && (
-          <p className="mt-2 line-clamp-2 text-[13px] text-ink-soft">{a.summary}</p>
+          <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-ink-soft">
+            {a.summary}
+          </p>
         )}
-        <p className="mt-2.5 text-xs text-ink-mute">{formatDate(a.published_at)}</p>
+        <p className="mt-3 text-xs font-medium text-ink-mute">
+          {formatDate(a.published_at)}
+        </p>
       </div>
     </Link>
   );
