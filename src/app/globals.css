@@ -3,6 +3,8 @@
 :root {
   --background: #ffffff;
   --foreground: #1a1d24;
+  /* Public blog is light-only (matches the design); ignore OS dark mode. */
+  color-scheme: light;
 }
 
 @theme inline {
