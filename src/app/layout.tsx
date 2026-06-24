@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Noto_Sans_Telugu } from "next/font/google";
+import { Geist, Noto_Sans_Telugu } from "next/font/google";
 import "./globals.css";
 import { SITE } from "@/lib/site";
 import { Analytics } from "@/components/analytics";
@@ -7,11 +7,7 @@ import { Analytics } from "@/components/analytics";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  display: "swap",
 });
 
 // Proper Telugu script rendering across the site.
@@ -20,6 +16,10 @@ const notoTelugu = Noto_Sans_Telugu({
   subsets: ["telugu"],
   display: "swap",
 });
+
+const supabaseOrigin = process.env.NEXT_PUBLIC_SUPABASE_URL
+  ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin
+  : undefined;
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE.url),
@@ -54,8 +54,17 @@ export default function RootLayout({
   return (
     <html
       lang="te"
-      className={`${geistSans.variable} ${geistMono.variable} ${notoTelugu.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${notoTelugu.variable} h-full antialiased`}
     >
+      <head>
+        {/* Warm up the connection to Supabase Storage for faster image LCP. */}
+        {supabaseOrigin && (
+          <>
+            <link rel="preconnect" href={supabaseOrigin} crossOrigin="" />
+            <link rel="dns-prefetch" href={supabaseOrigin} />
+          </>
+        )}
+      </head>
       <body className="min-h-full flex flex-col font-sans">
         {children}
         <Analytics />

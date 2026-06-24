@@ -6,6 +6,10 @@ import { CATEGORIES } from "@/lib/site";
 
 export const revalidate = 300;
 
+export function generateStaticParams() {
+  return CATEGORIES.map((c) => ({ category: c.slug }));
+}
+
 export async function generateMetadata({
   params,
 }: {

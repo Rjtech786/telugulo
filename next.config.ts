@@ -8,8 +8,8 @@ const nextConfig: NextConfig = {
   // Hide the on-screen Next.js dev indicator (bottom-left "N" badge).
   devIndicators: false,
   images: {
-    // Featured images live in Supabase Storage. next/image serves them as
-    // optimized WebP (speed / Core Web Vitals).
+    // Serve modern formats (AVIF first, then WebP) for the smallest payloads.
+    formats: ["image/avif", "image/webp"],
     remotePatterns: [
       { protocol: "https", hostname: supabaseHost, pathname: "/storage/v1/object/public/**" },
     ],

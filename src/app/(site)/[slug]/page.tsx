@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getPublishedBySlug, getAuthor } from "@/lib/public";
+import { getPublishedBySlug, getAuthor, listPublished } from "@/lib/public";
 import { ArticleBody } from "@/components/article-body";
 import { ViewPing } from "@/components/view-ping";
 import { AdSlot } from "@/components/ad-slot";
@@ -10,6 +10,13 @@ import { CategoryBadge } from "@/components/article-card";
 import { SITE, formatDate } from "@/lib/site";
 
 export const revalidate = 300;
+
+// Pre-render all published articles at build (static + ISR). New articles
+// published later are rendered on first request and then cached.
+export async function generateStaticParams() {
+  const articles = await listPublished(1000);
+  return articles.map((a) => ({ slug: a.slug }));
+}
 
 export async function generateMetadata({
   params,

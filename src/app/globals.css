@@ -27,7 +27,7 @@
 
   /* Latin glyphs from Geist, Telugu glyphs fall back to Noto Sans Telugu. */
   --font-sans: var(--font-geist-sans), var(--font-telugu), system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 body {
