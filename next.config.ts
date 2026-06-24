@@ -5,6 +5,8 @@ const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
   : "*.supabase.co";
 
 const nextConfig: NextConfig = {
+  // Hide the on-screen Next.js dev indicator (bottom-left "N" badge).
+  devIndicators: false,
   images: {
     // Featured images live in Supabase Storage. next/image serves them as
     // optimized WebP (speed / Core Web Vitals).
