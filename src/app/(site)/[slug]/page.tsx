@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { getPublishedBySlug, getAuthor } from "@/lib/public";
 import { ArticleBody } from "@/components/article-body";
 import { ViewPing } from "@/components/view-ping";
+import { AdSlot } from "@/components/ad-slot";
 import { SITE, formatDate } from "@/lib/site";
 
 export const revalidate = 300;
@@ -126,6 +127,11 @@ export default async function ArticlePage({
 
       <div className="mt-6">
         <ArticleBody body={a.body || ""} />
+      </div>
+
+      <div className="mt-8">
+        {/* Ad slot — renders only if an active ad exists (Discover-safe). */}
+        <AdSlot category={a.category} />
       </div>
 
       {author?.bio && (
