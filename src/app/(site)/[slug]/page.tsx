@@ -28,11 +28,11 @@ export async function generateMetadata({
   if (!a) return { title: "Not found" };
 
   const description = a.meta_description || a.summary || SITE.description;
-  const url = `${SITE.url}/${a.slug}`;
+  const url = `${SITE.url}/${a.slug}/`;
   return {
     title: a.title_meta || a.title,
     description,
-    alternates: { canonical: `/${a.slug}` },
+    alternates: { canonical: `/${a.slug}/` },
     openGraph: {
       type: "article",
       title: a.title,
@@ -60,7 +60,7 @@ export default async function ArticlePage({
   if (!a) notFound();
 
   const author = a.author_id ? await getAuthor(a.author_id) : null;
-  const url = `${SITE.url}/${a.slug}`;
+  const url = `${SITE.url}/${a.slug}/`;
 
   const jsonLd = {
     "@context": "https://schema.org",

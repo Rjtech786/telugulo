@@ -17,7 +17,7 @@ export async function GET() {
 
   const items = articles
     .map((a) => {
-      const link = `${SITE.url}/${a.slug}`;
+      const link = `${SITE.url}/${a.slug}/`;
       const date = a.published_at ? new Date(a.published_at).toUTCString() : "";
       return `    <item>
       <title>${esc(a.title)}</title>
