@@ -33,6 +33,45 @@ function parseJson<T>(raw: string): T {
   return JSON.parse(s) as T;
 }
 
+/** Strip ``` fences from a plain-text response. */
+function stripFences(raw: string): string {
+  const s = raw.trim();
+  const fence = s.match(/```(?:\w+)?\s*([\s\S]*?)```/);
+  return (fence ? fence[1] : s).trim();
+}
+
+type ArticleFields = {
+  headline: string;
+  title_meta: string;
+  meta_description: string;
+  summary: string;
+  slug: string;
+  category: string;
+  body: string;
+};
+
+/**
+ * Parse the writing step's delimited output. Robust to long multi-line bodies
+ * (avoids the JSON control-character problem with article text).
+ */
+function parseArticleFields(raw: string): ArticleFields {
+  const s = stripFences(raw);
+  const field = (label: string) => {
+    const m = s.match(new RegExp(`^${label}:[ \\t]*(.*)$`, "mi"));
+    return m ? m[1].trim() : "";
+  };
+  const bodyMatch = s.match(/^BODY:[ \t]*\n?([\s\S]*)$/im);
+  return {
+    headline: field("HEADLINE"),
+    title_meta: field("TITLE_META"),
+    meta_description: field("META_DESCRIPTION"),
+    summary: field("SUMMARY"),
+    slug: field("SLUG"),
+    category: field("CATEGORY") || "tech",
+    body: bodyMatch ? bodyMatch[1].trim() : "",
+  };
+}
+
 async function getDefaultAuthorId(): Promise<string> {
   const supabase = createAdminClient();
   const { data } = await supabase.from("authors").select("id").limit(1).maybeSingle();
@@ -130,15 +169,10 @@ export async function runPipeline(): Promise<PipelineResult> {
         maxTokens: 4000,
         temperature: 0.8,
       });
-      const article = parseJson<{
-        headline: string;
-        title_meta: string;
-        meta_description: string;
-        summary: string;
-        slug: string;
-        category: string;
-        body: string;
-      }>(written.text);
+      const article = parseArticleFields(written.text);
+      if (!article.headline || !article.body) {
+        throw new Error("Writing step returned an unparseable article");
+      }
       log.push(`  Write: "${article.headline}"`);
 
       // STEP 7 (early) — SELF-CRITIQUE on the body
@@ -150,8 +184,14 @@ export async function runPipeline(): Promise<PipelineResult> {
           maxTokens: 4000,
           temperature: 0.4,
         });
-        finalBody = parseJson<{ body: string }>(checked.text).body || article.body;
-        log.push("  Self-critique: cleaned");
+        const cleaned = stripFences(checked.text);
+        // Guard against a model that returns junk/too-short output.
+        if (cleaned.length > article.body.length * 0.5) {
+          finalBody = cleaned;
+          log.push("  Self-critique: cleaned");
+        } else {
+          log.push("  Self-critique: kept original (output too short)");
+        }
       } catch {
         log.push("  Self-critique: skipped (kept original)");
       }

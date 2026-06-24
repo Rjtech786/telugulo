@@ -66,27 +66,31 @@ ${opts.research}
 
 Structure: hook → context → explanation → takeaway. Use short paragraphs.
 
-Respond ONLY with JSON (no markdown fences):
-{
-  "headline": "<clean declarative Telugu headline, no clickbait>",
-  "title_meta": "<SEO title, <60 chars>",
-  "meta_description": "<SEO meta description in Telugu, <160 chars>",
-  "summary": "<2-3 line Telugu summary for the card/Telegram>",
-  "slug": "<telugu romanized, lowercase, hyphens, 4-6 words, keyword first, NO telugu script>",
-  "category": "<one of: ai, mobile, apps, gadgets, internet, tech>",
-  "body": "<the full article in hybrid Telugu, plain text with blank lines between paragraphs>"
-}`;
+Respond in EXACTLY this format (plain text, no markdown, no JSON). Keep each of
+the first six fields on a SINGLE line. The body comes last and can span many
+lines:
+
+HEADLINE: <clean declarative Telugu headline, no clickbait>
+TITLE_META: <SEO title, under 60 chars>
+META_DESCRIPTION: <SEO meta description in Telugu, under 160 chars>
+SUMMARY: <2-3 line Telugu summary for the card>
+SLUG: <telugu romanized, lowercase, hyphens, 4-6 words, keyword first, NO telugu script>
+CATEGORY: <one of: ai, mobile, apps, gadgets, internet, tech>
+BODY:
+<the full article in hybrid Telugu, paragraphs separated by blank lines>`;
 }
 
 export function selfCheckPrompt(body: string): string {
   return `${HYBRID_TELUGU_RULES}
 
-Review this draft as a strict editor. Fix any robotic AI phrasing, forced Telugu translations of tech words, or factual hedging. Keep it natural and human. Do NOT shorten it much.
+Review this draft as a strict editor. Fix any robotic AI phrasing, forced Telugu
+translations of tech words, or factual hedging. Keep it natural and human. Do
+NOT shorten it much.
 
 Draft:
 ${body}
 
-Respond ONLY with JSON: {"body": "<the improved article>"}`;
+Respond with ONLY the improved article text — no preamble, no JSON, no markdown.`;
 }
 
 export function imagePrompt(headline: string, category: string): string {
