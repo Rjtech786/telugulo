@@ -3,7 +3,8 @@ export const SITE = {
   name: "telugulo.in",
   title: "telugulo.in — తెలుగు Tech & AI News",
   description:
-    "తెలుగులో AI & tech news. Latest gadgets, apps, ChatGPT, smartphones — daily updates, simple Telugu lo.",
+    "రోజువారీ టెక్ న్యూస్, AI, gadgets — తెలుగులో. తాజా technology వార్తలు simple Telugu lo.",
+  tagline: "టెక్ న్యూస్ తెలుగులో",
   url: process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
   locale: "te_IN",
   organization: {
@@ -14,25 +15,51 @@ export const SITE = {
 
 export const CATEGORIES: { slug: string; label: string }[] = [
   { slug: "ai", label: "AI" },
-  { slug: "mobile", label: "Mobile" },
-  { slug: "apps", label: "Apps" },
-  { slug: "gadgets", label: "Gadgets" },
-  { slug: "internet", label: "Internet" },
-  { slug: "tech", label: "Tech" },
+  { slug: "mobile", label: "మొబైల్" },
+  { slug: "apps", label: "యాప్స్" },
+  { slug: "gadgets", label: "గాడ్జెట్స్" },
+  { slug: "internet", label: "ఇంటర్నెట్" },
+  { slug: "tech", label: "టెక్" },
 ];
 
+export function categoryLabel(slug: string | null): string {
+  if (!slug) return "టెక్";
+  return CATEGORIES.find((c) => c.slug === slug)?.label ?? slug;
+}
+
 export const FOOTER_PAGES: { href: string; label: string }[] = [
-  { href: "/about", label: "మా గురించి (About)" },
-  { href: "/contact", label: "సంప్రదించండి (Contact)" },
-  { href: "/privacy", label: "గోప్యతా విధానం (Privacy)" },
-  { href: "/disclaimer", label: "నిరాకరణ (Disclaimer)" },
-  { href: "/terms", label: "నిబంధనలు (Terms)" },
-  { href: "/editorial-policy", label: "సంపాదకీయ విధానం (Editorial)" },
+  { href: "/about", label: "మా గురించి" },
+  { href: "/contact", label: "సంప్రదించండి" },
+  { href: "/privacy", label: "ప్రైవసీ" },
+  { href: "/disclaimer", label: "నిరాకరణ" },
+  { href: "/terms", label: "నిబంధనలు" },
+  { href: "/editorial-policy", label: "సంపాదకీయ విధానం" },
 ];
+
+// Colourful gradient placeholders for articles without a featured image
+// (matches the UI mock). Deterministic per seed so a card keeps its colour.
+const GRADIENTS: [string, string][] = [
+  ["#1d4ed8", "#3b82f6"],
+  ["#0ea5e9", "#22d3ee"],
+  ["#8b5cf6", "#a78bfa"],
+  ["#f59e0b", "#fbbf24"],
+  ["#ec4899", "#f472b6"],
+  ["#14b8a6", "#2dd4bf"],
+  ["#6366f1", "#818cf8"],
+  ["#f43f5e", "#fb7185"],
+  ["#84cc16", "#a3e635"],
+];
+
+export function gradientFor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  const [a, b] = GRADIENTS[h % GRADIENTS.length];
+  return `linear-gradient(135deg, ${a}, ${b})`;
+}
 
 export function formatDate(iso: string | null): string {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-IN", {
+  return new Date(iso).toLocaleDateString("te-IN", {
     year: "numeric",
     month: "short",
     day: "numeric",

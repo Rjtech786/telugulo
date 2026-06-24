@@ -3,22 +3,21 @@ import { SITE, FOOTER_PAGES } from "@/lib/site";
 
 export function SiteFooter() {
   return (
-    <footer className="mt-16 border-t border-neutral-200 dark:border-neutral-800">
-      <div className="mx-auto max-w-4xl px-4 py-8">
-        <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-neutral-500">
+    <footer className="mt-10 border-t border-line bg-surface">
+      <div className="mx-auto flex max-w-[1040px] flex-wrap items-center justify-between gap-3 px-5 py-7">
+        <div className="text-[13px] text-ink-soft">
+          © {new Date().getFullYear()} {SITE.name} · {SITE.tagline}
+        </div>
+        <div className="flex flex-wrap gap-4 text-[13px] text-ink-soft">
           {FOOTER_PAGES.map((p) => (
-            <Link key={p.href} href={p.href} className="hover:text-neutral-900 dark:hover:text-white">
+            <Link key={p.href} href={p.href} className="hover:text-accent">
               {p.label}
             </Link>
           ))}
-          <Link href="/feed.xml" className="hover:text-neutral-900 dark:hover:text-white">
+          <Link href="/feed.xml" className="hover:text-accent">
             RSS
           </Link>
         </div>
-        <p className="mt-4 text-xs text-neutral-400">
-          © {new Date().getFullYear()} {SITE.name} · AI-assisted, human-reviewed
-          Telugu tech & AI news.
-        </p>
       </div>
     </footer>
   );

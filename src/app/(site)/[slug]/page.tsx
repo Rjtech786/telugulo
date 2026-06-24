@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import Image from "next/image";
 import { notFound } from "next/navigation";
 import { getPublishedBySlug, getAuthor } from "@/lib/public";
 import { ArticleBody } from "@/components/article-body";
 import { ViewPing } from "@/components/view-ping";
 import { AdSlot } from "@/components/ad-slot";
+import { Thumb } from "@/components/thumb";
+import { CategoryBadge } from "@/components/article-card";
 import { SITE, formatDate } from "@/lib/site";
 
 export const revalidate = 300;
@@ -75,78 +76,88 @@ export default async function ArticlePage({
   };
 
   return (
-    <article className="mx-auto max-w-2xl">
+    <article className="mx-auto max-w-[720px]">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <ViewPing id={a.id} />
 
-      {a.category && (
-        <Link
-          href={`/category/${a.category}`}
-          className="text-xs font-medium uppercase tracking-wide text-neutral-400 hover:text-neutral-600"
-        >
-          {a.category}
-        </Link>
-      )}
-      <h1 className="mt-1 text-3xl font-bold leading-tight tracking-tight">
+      <Link
+        href="/"
+        className="mt-6 mb-5 inline-flex items-center gap-1.5 text-[13px] text-accent"
+      >
+        ← వెనక్కి
+      </Link>
+
+      <div>
+        {a.category ? (
+          <Link href={`/category/${a.category}`}>
+            <CategoryBadge slug={a.category} />
+          </Link>
+        ) : (
+          <CategoryBadge slug={a.category} />
+        )}
+      </div>
+
+      <h1 className="mt-4 text-[32px] font-bold leading-tight tracking-tight text-ink">
         {a.title}
       </h1>
 
-      <div className="mt-3 flex items-center gap-2 text-sm text-neutral-500">
-        {author && (
-          <>
-            <span>
-              {author.slug ? (
-                <Link href={`/author/${author.slug}`} className="font-medium hover:underline">
-                  {author.name}
-                </Link>
-              ) : (
-                <span className="font-medium">{author.name}</span>
-              )}
-            </span>
-            <span>·</span>
-          </>
-        )}
-        <time dateTime={a.published_at ?? undefined}>{formatDate(a.published_at)}</time>
+      <div className="mt-4 flex items-center gap-3 border-b border-line pb-5 text-[13px] text-ink-soft">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-white">
+          తె
+        </span>
+        <span>
+          <span className="block font-medium text-ink">
+            {author?.slug ? (
+              <Link href={`/author/${author.slug}`} className="hover:text-accent">
+                {author.name}
+              </Link>
+            ) : (
+              author?.name ?? "telugulo team"
+            )}
+          </span>
+          <time dateTime={a.published_at ?? undefined}>
+            {formatDate(a.published_at)} · {readMins(a.body)} నిమి చదవండి
+          </time>
+        </span>
       </div>
 
-      {a.image_url && (
-        <div className="relative mt-5 aspect-[16/9] overflow-hidden rounded-2xl">
-          <Image
-            src={a.image_url}
-            alt={a.title}
-            fill
-            priority
-            sizes="(max-width: 768px) 100vw, 42rem"
-            className="object-cover"
-          />
-        </div>
-      )}
+      <Thumb
+        src={a.image_url}
+        alt={a.title}
+        seed={a.id}
+        className="mt-7 h-[320px] w-full rounded-xl"
+        sizes="(max-width: 760px) 100vw, 720px"
+        priority
+      />
 
-      <div className="mt-6">
+      <div className="mt-7">
         <ArticleBody body={a.body || ""} />
       </div>
 
-      <div className="mt-8">
-        {/* Ad slot — renders only if an active ad exists (Discover-safe). */}
-        <AdSlot category={a.category} />
-      </div>
-
-      {author?.bio && (
-        <div className="mt-10 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900">
-          <div className="font-semibold">{author.name}</div>
-          <p className="mt-1 text-neutral-500">{author.bio}</p>
-        </div>
-      )}
-
-      <div className="mt-8 text-xs text-neutral-400">
-        AI-assisted, human-reviewed. ·{" "}
+      <div className="my-7 border-l-[3px] border-line py-2 pl-4 text-[13px] italic text-ink-mute">
+        ℹ️ ఈ article AI సహాయంతో తయారు చేసి, మానవ సమీక్ష తర్వాత ప్రచురించబడింది. ·{" "}
         <Link href="/editorial-policy" className="underline">
           Editorial policy
         </Link>
       </div>
+
+      <AdSlot category={a.category} />
+
+      {author?.bio && (
+        <div className="mt-8 rounded-xl border border-line bg-surface p-4 text-sm">
+          <div className="font-semibold text-ink">{author.name}</div>
+          <p className="mt-1 text-ink-soft">{author.bio}</p>
+        </div>
+      )}
     </article>
   );
+}
+
+/** Rough read-time: ~180 Telugu words/min. */
+function readMins(body: string | null): number {
+  if (!body) return 1;
+  return Math.max(1, Math.round(body.split(/\s+/).length / 180));
 }

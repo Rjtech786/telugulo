@@ -1,40 +1,38 @@
 import Link from "next/link";
-import Image from "next/image";
 import type { PublicArticle } from "@/lib/public";
-import { formatDate } from "@/lib/site";
+import { formatDate, categoryLabel } from "@/lib/site";
+import { Thumb } from "@/components/thumb";
+
+export function CategoryBadge({ slug }: { slug: string | null }) {
+  return (
+    <span className="inline-block rounded-md bg-accent-soft px-2.5 py-1 text-[11px] font-semibold text-accent">
+      {categoryLabel(slug)}
+    </span>
+  );
+}
 
 export function ArticleCard({ a }: { a: PublicArticle }) {
   return (
     <Link
       href={`/${a.slug}`}
-      className="group flex gap-4 rounded-2xl border border-neutral-200 bg-white p-3 transition hover:border-neutral-300 hover:shadow-sm dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
+      className="group block overflow-hidden rounded-xl border border-line bg-white transition hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]"
     >
-      {a.image_url && (
-        <div className="relative aspect-[16/10] w-32 flex-none overflow-hidden rounded-xl sm:w-44">
-          <Image
-            src={a.image_url}
-            alt={a.title}
-            fill
-            sizes="(max-width: 640px) 8rem, 11rem"
-            className="object-cover transition group-hover:scale-105"
-          />
-        </div>
-      )}
-      <div className="min-w-0 flex-1 py-1">
-        {a.category && (
-          <span className="text-xs font-medium uppercase tracking-wide text-neutral-400">
-            {a.category}
-          </span>
-        )}
-        <h2 className="mt-0.5 line-clamp-2 font-semibold leading-snug">
+      <Thumb
+        src={a.image_url}
+        alt={a.title}
+        seed={a.id}
+        className="h-[150px] w-full"
+        sizes="(max-width: 560px) 100vw, (max-width: 840px) 50vw, 320px"
+      />
+      <div className="px-4 pb-4 pt-3.5">
+        <CategoryBadge slug={a.category} />
+        <h3 className="mt-2 line-clamp-2 text-base font-semibold leading-snug text-ink">
           {a.title}
-        </h2>
+        </h3>
         {a.summary && (
-          <p className="mt-1 line-clamp-2 text-sm text-neutral-500">{a.summary}</p>
+          <p className="mt-2 line-clamp-2 text-[13px] text-ink-soft">{a.summary}</p>
         )}
-        <p className="mt-2 text-xs text-neutral-400">
-          {formatDate(a.published_at)}
-        </p>
+        <p className="mt-2.5 text-xs text-ink-mute">{formatDate(a.published_at)}</p>
       </div>
     </Link>
   );
