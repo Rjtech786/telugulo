@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Light-only app. Make `dark:` utilities apply ONLY under an explicit `.dark`
+   ancestor (which we never add) instead of the OS preference — so the admin
+   renders cleanly in light even when the browser is in dark mode. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #1a1d24;
