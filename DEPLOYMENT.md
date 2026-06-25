@@ -48,13 +48,16 @@ sudo certbot --nginx -d telugulo.in -d www.telugulo.in
 - SSL/TLS mode: **Full (Strict)** — avoids redirect loops (spec §3).
 - Enable CDN, caching, security.
 
-## 7. Daily cron (article generation)
+## 7. Daily cron (article generation + auto-publish)
 ```bash
 crontab -e
-# 6:00 AM IST = 00:30 UTC
-30 0 * * *  curl -s -X POST https://telugulo.in/api/cron/generate \
+# 8:00 AM IST = 02:30 UTC
+30 2 * * *  curl -s -X POST https://telugulo.in/api/cron/generate \
   -H "Authorization: Bearer $CRON_SECRET" >> /home/ubuntu/telugulo-cron.log 2>&1
 ```
+With **Auto-publish ON** (Admin → AI Settings → General), each daily run writes
+the article and publishes it live immediately — no manual review. Turn it OFF
+to go back to draft-then-approve.
 
 ## 8. Telegram webhook (draft approval buttons)
 ```bash

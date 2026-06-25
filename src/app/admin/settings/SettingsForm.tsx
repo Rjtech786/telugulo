@@ -280,7 +280,7 @@ function GeneralSection({ initialGeneral }: { initialGeneral: GeneralSettings })
           />
         </div>
         <div>
-          <label className="text-sm font-medium">Publish time (IST)</label>
+          <label className="text-sm font-medium">Daily run time (IST)</label>
           <input
             type="time"
             value={g.publish_time}
@@ -289,6 +289,23 @@ function GeneralSection({ initialGeneral }: { initialGeneral: GeneralSettings })
           />
         </div>
       </div>
+
+      <label className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-neutral-200 px-3 py-2.5 dark:border-neutral-800">
+        <span>
+          <span className="text-sm font-medium">Auto-publish</span>
+          <span className="block text-xs text-neutral-500">
+            ON = articles go live automatically (no review). OFF = saved as
+            drafts for your approval.
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={g.auto_publish}
+          onChange={(e) => setG({ ...g, auto_publish: e.target.checked })}
+          className="h-5 w-5 accent-neutral-900 dark:accent-white"
+        />
+      </label>
+
       <SaveBar
         pending={pending}
         status={status}

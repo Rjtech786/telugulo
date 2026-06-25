@@ -123,14 +123,16 @@ export type GeneralSettings = {
   articles_per_day: 1 | 2;
   tone: "friendly" | "professional" | "casual";
   article_length: number; // 400–1500 words
-  publish_time: string; // "HH:MM" IST
+  publish_time: string; // "HH:MM" IST — when the daily cron runs
+  auto_publish: boolean; // true = publish live immediately (skip human review)
 };
 
 export const DEFAULT_GENERAL: GeneralSettings = {
   articles_per_day: 1,
   tone: "friendly",
   article_length: 900,
-  publish_time: "06:00",
+  publish_time: "08:00",
+  auto_publish: false,
 };
 
 export type CostSettings = {

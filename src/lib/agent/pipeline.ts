@@ -211,7 +211,9 @@ export async function runPipeline(): Promise<PipelineResult> {
         }
       }
 
-      // SAVE as draft
+      // SAVE — auto-publish goes live immediately; otherwise stays a draft
+      // for human review (spec default).
+      const publishNow = general.auto_publish;
       const { data: draft, error } = await supabase
         .from("articles")
         .insert({
@@ -225,16 +227,17 @@ export async function runPipeline(): Promise<PipelineResult> {
           image_url: imageUrl,
           author_id: authorId,
           source_urls: [{ title: cand.title, url: cand.link, source: cand.source }],
-          status: "draft",
+          status: publishNow ? "published" : "draft",
+          published_at: publishNow ? new Date().toISOString() : null,
         })
         .select("id, title, slug")
         .single();
       if (error) throw error;
 
       drafts.push({ id: draft.id, title: draft.title, slug: draft.slug });
-      log.push(`  Saved draft ${draft.id}`);
+      log.push(`  Saved ${publishNow ? "+ PUBLISHED" : "draft"} ${draft.id}`);
 
-      // Telegram approval notification (non-fatal)
+      // Telegram notification (non-fatal)
       if (features.telegram_notifications) {
         try {
           await notifyDraft({ id: draft.id, title: article.headline, summary: article.summary });

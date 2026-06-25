@@ -51,7 +51,8 @@ export async function saveGeneral(general: GeneralSettings) {
     article_length: Math.min(1500, Math.max(400, Number(general.article_length) || 900)),
     publish_time: /^\d{2}:\d{2}$/.test(general.publish_time)
       ? general.publish_time
-      : "06:00",
+      : "08:00",
+    auto_publish: Boolean(general.auto_publish),
   };
   await writeSetting(SETTINGS_KEYS.general, clean);
   revalidatePath("/admin/settings");
