@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { MarkdownEditor } from "@/components/markdown-editor";
+import { RichEditor } from "@/components/rich-editor";
 import {
   saveArticle,
   publish,
@@ -110,7 +110,7 @@ export function EditForm({ id, status, slug, imageUrl, initial }: Props) {
         </Labeled>
         <div className="space-y-1">
           <span className="text-sm font-medium">Body</span>
-          <MarkdownEditor value={f.body} onChange={(v) => setF({ ...f, body: v })} />
+          <RichEditor value={f.body} onChange={(v) => setF({ ...f, body: v })} />
         </div>
       </div>
     </div>

@@ -47,3 +47,68 @@ h2,
 h3 {
   text-wrap: balance;
 }
+
+/* ─── TipTap WYSIWYG editor content (WordPress-like) ─── */
+.rich-editor .ProseMirror {
+  min-height: 22rem;
+  outline: none;
+  font-size: 17px;
+  line-height: 1.8;
+  color: #2a2f3a;
+}
+.rich-editor .ProseMirror > * + * { margin-top: 0.85em; }
+.rich-editor .ProseMirror h2 {
+  font-family: var(--font-telugu-serif), Georgia, serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1d24;
+  margin-top: 1.4em;
+}
+.rich-editor .ProseMirror h3 {
+  font-family: var(--font-telugu-serif), Georgia, serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a1d24;
+  margin-top: 1.2em;
+}
+.rich-editor .ProseMirror h4 { font-size: 18px; font-weight: 700; color: #1a1d24; }
+.rich-editor .ProseMirror strong { font-weight: 700; color: #1a1d24; }
+.rich-editor .ProseMirror ul { list-style: disc; padding-left: 1.5rem; }
+.rich-editor .ProseMirror ol { list-style: decimal; padding-left: 1.5rem; }
+.rich-editor .ProseMirror li { margin: 0.25rem 0; }
+.rich-editor .ProseMirror a { color: #1d4ed8; text-decoration: underline; }
+.rich-editor .ProseMirror blockquote {
+  border-left: 3px solid #c7d2fe;
+  padding-left: 1rem;
+  color: #5a616e;
+  font-style: italic;
+}
+.rich-editor .ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid #e8eaef;
+  margin: 0.5rem 0;
+}
+.rich-editor .ProseMirror img.ProseMirror-selectednode { outline: 3px solid #1d4ed8; }
+.rich-editor .ProseMirror code {
+  background: #f1f5f9;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.rich-editor .ProseMirror pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 0.8rem 1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.rich-editor .ProseMirror pre code { background: none; padding: 0; color: inherit; }
+.rich-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #9aa0ad;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
