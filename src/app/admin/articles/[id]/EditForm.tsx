@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { MarkdownEditor } from "@/components/markdown-editor";
 import {
   saveArticle,
   publish,
@@ -107,9 +108,10 @@ export function EditForm({ id, status, slug, imageUrl, initial }: Props) {
         <Labeled label="Summary">
           <textarea className={field} rows={2} value={f.summary} onChange={(e) => setF({ ...f, summary: e.target.value })} />
         </Labeled>
-        <Labeled label="Body">
-          <textarea className={`${field} font-mono`} rows={20} value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} />
-        </Labeled>
+        <div className="space-y-1">
+          <span className="text-sm font-medium">Body</span>
+          <MarkdownEditor value={f.body} onChange={(v) => setF({ ...f, body: v })} />
+        </div>
       </div>
     </div>
   );

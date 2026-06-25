@@ -113,3 +113,15 @@ export async function removeFeaturedImage(id: string) {
   revalidateArticle(id);
   return { ok: true, url: null };
 }
+
+/** Upload an inline body image to Storage and return its URL (for Markdown). */
+export async function uploadBodyImage(formData: FormData) {
+  await requireAdmin();
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) throw new Error("No file selected");
+  if (!file.type.startsWith("image/")) throw new Error("Please choose an image file");
+  if (file.size > 10 * 1024 * 1024) throw new Error("Image too large (max 10MB)");
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const url = await uploadArticleImage(bytes, file.type, "body");
+  return { ok: true, url };
+}
