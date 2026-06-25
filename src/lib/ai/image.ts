@@ -54,6 +54,8 @@ export async function generateImage(
     }
 
     case "dalle": {
+      // OpenAI's current image model (gpt-image-1). dall-e-3 is unavailable on
+      // newer accounts. Always returns base64 PNG; no response_format param.
       const data = await post("https://api.openai.com/v1/images/generations", {
         method: "POST",
         headers: {
@@ -61,16 +63,26 @@ export async function generateImage(
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          model: "dall-e-3",
+          model: "gpt-image-1",
           prompt,
-          size: "1792x1024", // landscape, >1200px wide
+          size: "1536x1024", // landscape, >1200px wide (Google Discover)
           n: 1,
-          response_format: "b64_json",
+          quality: "medium", // good quality / cost balance
         }),
       });
-      const b64 = data.data?.[0]?.b64_json;
-      if (!b64) throw new Error("DALL·E returned no image");
-      return { bytes: Buffer.from(b64, "base64"), contentType: "image/png" };
+      const item = data.data?.[0];
+      if (item?.b64_json) {
+        return { bytes: Buffer.from(item.b64_json, "base64"), contentType: "image/png" };
+      }
+      if (item?.url) {
+        const imgRes = await fetch(item.url);
+        if (!imgRes.ok) throw new Error(`Image fetch failed: ${imgRes.status}`);
+        return {
+          bytes: Buffer.from(await imgRes.arrayBuffer()),
+          contentType: imgRes.headers.get("content-type") || "image/png",
+        };
+      }
+      throw new Error("OpenAI returned no image");
     }
 
     default:

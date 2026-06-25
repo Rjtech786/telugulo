@@ -37,7 +37,7 @@ export const TEXT_MODELS: Record<
 export type ImageProvider = "imagen" | "dalle";
 export const IMAGE_PROVIDERS: { id: ImageProvider; label: string }[] = [
   { id: "imagen", label: "Imagen (Google)" },
-  { id: "dalle", label: "DALL·E (OpenAI)" },
+  { id: "dalle", label: "OpenAI (gpt-image-1)" },
 ];
 
 // ─── 7-step agent pipeline + extra agents (spec §4, §8.3) ───
