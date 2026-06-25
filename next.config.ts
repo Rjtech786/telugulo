@@ -17,6 +17,10 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       { protocol: "https", hostname: supabaseHost, pathname: "/storage/v1/object/public/**" },
     ],
+    // Some networks (NAT64/DNS64) resolve the public Supabase host to a
+    // 64:ff9b:: address, which Next 16 blocks as "private". We only optimize
+    // images from the allowlisted Supabase host above, so this is safe.
+    dangerouslyAllowLocalIP: true,
   },
 };
 
