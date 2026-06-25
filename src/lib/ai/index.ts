@@ -11,8 +11,17 @@ import { generateImage, type ImageGenResult } from "./image";
  * the encrypted API key, then routes to the right provider.
  */
 
+// Image providers share an API key with their text sibling, so fall back to it
+// if no dedicated key is saved: DALL·E → OpenAI key, Imagen → Gemini (Google) key.
+const KEY_FALLBACK: Partial<Record<CredentialProvider, CredentialProvider>> = {
+  dalle: "openai",
+  imagen: "gemini",
+};
+
 async function keyFor(provider: CredentialProvider): Promise<string> {
-  const key = await getDecryptedKey(provider);
+  let key = await getDecryptedKey(provider);
+  const fallback = KEY_FALLBACK[provider];
+  if (!key && fallback) key = await getDecryptedKey(fallback);
   if (!key) {
     throw new Error(
       `No API key saved for "${provider}". Add it in Admin → Credentials.`,
