@@ -51,8 +51,8 @@ sudo certbot --nginx -d telugulo.in -d www.telugulo.in
 ## 7. Daily cron (article generation + auto-publish)
 ```bash
 crontab -e
-# 8:00 AM IST = 02:30 UTC
-30 2 * * *  curl -s -X POST https://telugulo.in/api/cron/generate \
+# 8:00 AM IST = 02:30 UTC  (note the trailing slash — required by trailingSlash)
+30 2 * * *  curl -s -X POST https://telugulo.in/api/cron/generate/ \
   -H "Authorization: Bearer $CRON_SECRET" >> /home/ubuntu/telugulo-cron.log 2>&1
 ```
 With **Auto-publish ON** (Admin → AI Settings → General), each daily run writes
@@ -61,7 +61,7 @@ to go back to draft-then-approve.
 
 ## 8. Telegram webhook (draft approval buttons)
 ```bash
-curl "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://telugulo.in/api/telegram/webhook"
+curl "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://telugulo.in/api/telegram/webhook/"
 ```
 
 ## 9. Migration safety (spec §14)

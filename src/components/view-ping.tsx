@@ -8,7 +8,7 @@ export function ViewPing({ id }: { id: string }) {
     const key = `viewed:${id}`;
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "1");
-    fetch("/api/views", {
+    fetch("/api/views/", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ id }),
