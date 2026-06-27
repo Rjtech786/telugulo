@@ -1,8 +1,14 @@
 import { ImageResponse } from "next/og";
+import { readFileSync } from "fs";
+import { join } from "path";
 
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 export const alt = "telugulo.in — Telugu Tech & AI News";
+
+const teluguFont = readFileSync(
+  join(process.cwd(), "src/app/_assets/NotoSansTelugu-700.woff"),
+);
 
 // Default social-share image for pages without their own featured image.
 export default function OgImage() {
@@ -14,11 +20,11 @@ export default function OgImage() {
           flexDirection: "column",
           width: "100%",
           height: "100%",
-          background: "linear-gradient(135deg, #1d4ed8, #3b82f6)",
+          background: "linear-gradient(135deg, #d11919, #ef3a3a)",
           color: "white",
           padding: 90,
           justifyContent: "center",
-          fontFamily: "sans-serif",
+          fontFamily: "Noto Telugu, sans-serif",
         }}
       >
         <div
@@ -26,16 +32,16 @@ export default function OgImage() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            width: 96,
-            height: 96,
-            borderRadius: 22,
+            width: 110,
+            height: 110,
+            borderRadius: 26,
             background: "rgba(255,255,255,0.18)",
-            fontSize: 56,
+            fontSize: 64,
             fontWeight: 800,
             marginBottom: 36,
           }}
         >
-          t
+          తె
         </div>
         <div style={{ fontSize: 84, fontWeight: 800, letterSpacing: -2 }}>
           telugulo.in
@@ -45,6 +51,11 @@ export default function OgImage() {
         </div>
       </div>
     ),
-    size,
+    {
+      ...size,
+      fonts: [
+        { name: "Noto Telugu", data: teluguFont, weight: 700, style: "normal" },
+      ],
+    },
   );
 }
