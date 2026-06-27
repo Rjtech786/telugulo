@@ -4,7 +4,7 @@
 > state. (No secrets here — repo is public. Real secrets live in `.env.local`
 > locally and `.env.production` on the EC2.)
 
-**Last updated:** 2026-06-26 · **Owner:** Roshan (roshanjameer8786@gmail.com)
+**Last updated:** 2026-06-27 · **Owner:** Roshan (roshanjameer8786@gmail.com)
 
 ---
 
@@ -29,9 +29,9 @@ Built with Next.js 16. Replaces the old WordPress site.
 
 ## 4. Supabase (dedicated project — NOT the ApnaBot one)
 - **Project id:** `ofusghtmlbhikrohtskm` · URL `https://ofusghtmlbhikrohtskm.supabase.co` · region ap-south-1
-- **Tables:** `articles`, `authors`, `settings`, `api_keys` (AES-256-GCM encrypted), `ads`, `performance_insights`
+- **Tables:** `articles`, `authors`, `settings`, `api_keys` (AES-256-GCM encrypted), `ads`, `performance_insights`, `page_views` (timestamped view events for traffic analytics)
 - **Storage bucket:** `article-images` (public)
-- **Migrations:** `supabase/migrations/` (0001 schema, 0002 view-counter)
+- **Migrations:** `supabase/migrations/` (0001 schema, 0002 view-counter, 0003 ad counters, 0004 page_views + `daily_view_counts`/`top_articles_since` RPCs)
 - RLS on: only published articles / authors / active ads are public; rest is server-only (service role)
 
 ## 5. Key code structure
@@ -39,8 +39,10 @@ Built with Next.js 16. Replaces the old WordPress site.
 src/
   app/
     (site)/            public blog: page (home), [slug], category, author, about/privacy/etc.
-    admin/             dashboard: AdminShell (sidebar), page (overview), articles, settings,
-                       credentials, integrations, analytics, ads, articles/[id] (editor)
+                       layout reads getSiteSettings() → header/footer (name, tagline, socials)
+    admin/             dashboard: AdminShell (sidebar), page (overview w/ traffic chart),
+                       articles, site (Site Settings), settings (AI), credentials,
+                       integrations, analytics, ads, articles/[id] (editor), _ui.tsx (shared)
     api/cron/generate  daily trigger (POST, Bearer CRON_SECRET)
     api/telegram/webhook, api/views
     sitemap.ts, robots.ts, feed.xml, news-sitemap.xml, manifest.ts, icon/apple-icon/opengraph-image
@@ -50,7 +52,8 @@ src/
     agent/             pipeline.ts (7-step), prompts.ts (WRITING RULES), sources.ts (RSS), slug.ts, telegram.ts
     crypto.ts          AES-256-GCM for api_keys
     supabase/          client.ts, server.ts, admin.ts (service role)
-    settings.ts, api-keys.ts, articles.ts, public.ts, config.ts, site.ts, auth.ts
+    settings.ts (+ getSiteSettings), analytics.ts (traffic rollups, IST-aware),
+    api-keys.ts, articles.ts, public.ts, config.ts, site.ts, auth.ts
   components/          rich-editor (TipTap), article-card, article-body, site-header/footer, icons, thumb, site-head
 ```
 
@@ -131,7 +134,10 @@ suite (favicons, OG, manifest, news sitemap, WebSite/Org/Breadcrumb schema, 404)
 WYSIWYG (TipTap) editor → trailing slashes + Kalonji article migration →
 auto-publish at 8 AM → image gen fixed to gpt-image-1 → **deployed to EC2 +
 Cloudflare + SSL (LIVE)** → GSC verified → stricter writing rules → low-cost
-images.
+images → **taazatime-style red magazine redesign** (public site) + తె favicon →
+**admin upgrade**: page_views traffic analytics (Overview chart + today/yesterday
++ top articles), DB-driven **Site Settings** (name/tagline/socials), agent topic
+dedupe + ## subheadings, brand-consistent admin UI.
 
 ---
 *Update this file as the project changes so a fresh session stays in sync.*
