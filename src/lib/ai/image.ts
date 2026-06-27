@@ -67,7 +67,7 @@ export async function generateImage(
           prompt,
           size: "1536x1024", // landscape, >1200px wide (Google Discover)
           n: 1,
-          quality: "medium", // good quality / cost balance
+          quality: "low", // cheapest (~₹1.4/img); fine for blog headers
         }),
       });
       const item = data.data?.[0];
