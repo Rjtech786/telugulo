@@ -173,15 +173,22 @@ function WebStories({ items }: { items: PublicArticle[] }) {
     <section className="mt-12 rounded-xl bg-story p-5 text-white sm:p-7">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-[20px] font-extrabold">Web Stories</h2>
-        <Link href="/" className="text-[13px] font-semibold text-white/80 hover:text-white">
+        <a
+          href={`/web-stories/${items[0].slug}/`}
+          target="_blank"
+          rel="noopener"
+          className="text-[13px] font-semibold text-white/80 hover:text-white"
+        >
           Watch More ▸
-        </Link>
+        </a>
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
         {items.map((a) => (
-          <Link
+          <a
             key={a.id}
-            href={`/${a.slug}`}
+            href={`/web-stories/${a.slug}/`}
+            target="_blank"
+            rel="noopener"
             className="group relative block aspect-[3/4] overflow-hidden rounded-lg"
           >
             <Thumb
@@ -192,10 +199,14 @@ function WebStories({ items }: { items: PublicArticle[] }) {
               sizes="(max-width: 640px) 50vw, 220px"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+            {/* play badge → signals these are real stories */}
+            <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-white/25 backdrop-blur">
+              <span className="ml-0.5 h-0 w-0 border-y-[5px] border-l-[8px] border-y-transparent border-l-white" />
+            </span>
             <h3 className="absolute inset-x-0 bottom-0 line-clamp-3 p-2.5 text-[12px] font-bold leading-snug text-white">
               {a.title}
             </h3>
-          </Link>
+          </a>
         ))}
       </div>
     </section>
