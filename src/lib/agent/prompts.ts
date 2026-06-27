@@ -31,15 +31,24 @@ HEADLINE: clean, declarative, specific. NO clickbait or sensationalism (Google D
 
 export const SYSTEM_EDITOR = `You are a writer/editor for telugulo.in, a Telugu tech & AI news blog. You write like an experienced human Telugu tech journalist — never robotic, never "AI-sounding". You think about what Telugu (Andhra Pradesh / Telangana) readers care about. You always respond in the exact format requested.`;
 
-export function selectionPrompt(candidates: Candidate[], count: number): string {
+export function selectionPrompt(
+  candidates: Candidate[],
+  count: number,
+  recentTitles: string[] = [],
+): string {
   const list = candidates
     .map((c, i) => `${i + 1}. [${c.source}] ${c.title}`)
     .join("\n");
+  const recent = recentTitles.length
+    ? `\n\nWe ALREADY published these recently — do NOT pick the same story or a near-duplicate:\n${recentTitles
+        .map((t) => `- ${t}`)
+        .join("\n")}`
+    : "";
   return `Here are today's candidate tech/AI news topics:
 
-${list}
+${list}${recent}
 
-As the editor, pick the TOP ${count} topic(s) that are most interesting and relevant for Telugu tech readers. Prefer AI, gadgets, apps, smartphones, and things with India relevance. Avoid niche US-only business news.
+As the editor, pick the TOP ${count} topic(s) that are most interesting and relevant for Telugu tech readers. Prefer AI, gadgets, apps, smartphones, and things with India relevance. Avoid niche US-only business news. Avoid anything we already covered (listed above) — freshness matters.
 
 If NONE are good enough today, set "skip" to true.
 
@@ -79,11 +88,11 @@ Target length: about ${opts.lengthWords} words.
 Research — use ONLY the facts here (rule 4). Do NOT copy sentences; write original Telugu. Do NOT add any fact that is not below:
 ${opts.research}
 
-Structure: hook → context → explanation → ONE analytical "why this matters" sentence (rule 5) → concrete ending (rule 1). Short paragraphs, varied sentence length.
+Structure: strong hook (no "ఇటీవల/recently" filler) → context → explanation → ONE analytical "why this matters" sentence (rule 5) → concrete ending (rule 1). Short paragraphs, varied sentence length. Break the article with 2-3 short Telugu "## subheadings" so it is scannable, and put the single most important fact in **bold** (once).
 
-Respond in EXACTLY this format (plain text, no markdown, no JSON). Keep each of
-the first six fields on a SINGLE line. The body comes last and can span many
-lines:
+Respond in EXACTLY this format. Keep each of the first six fields on a SINGLE
+line of plain text (no markdown in those). The BODY comes last, may use light
+markdown (## subheadings, **bold**) and can span many lines:
 
 HEADLINE: <clean declarative Telugu headline, no clickbait>
 TITLE_META: <SEO title, under 60 chars>
@@ -92,7 +101,7 @@ SUMMARY: <2-3 line Telugu summary for the card>
 SLUG: <telugu romanized, lowercase, hyphens, 4-6 words, keyword first, NO telugu script>
 CATEGORY: <one of: ai, mobile, apps, gadgets, internet, tech>
 BODY:
-<the full article in hybrid Telugu, paragraphs separated by blank lines>`;
+<the full article in hybrid Telugu, short paragraphs separated by blank lines, with 2-3 ## subheadings>`;
 }
 
 export function selfCheckPrompt(body: string): string {
@@ -108,11 +117,13 @@ You are a STRICT editor. Review this draft against ALL 8 rules above and fix eve
 - Delete repeated points (rule 8).
 
 Keep it natural and human. Do NOT shorten it much (only cut filler/repetition).
+Preserve the markdown structure — keep the ## subheadings, **bold**, and short
+paragraphs.
 
 Draft:
 ${body}
 
-Respond with ONLY the improved article text — no preamble, no JSON, no markdown.`;
+Respond with ONLY the improved article text (keep its markdown) — no preamble, no JSON.`;
 }
 
 export function imagePrompt(headline: string, category: string): string {

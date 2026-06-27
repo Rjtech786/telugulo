@@ -1,9 +1,9 @@
-import { SOCIALS } from "@/lib/site";
 import {
   IconFacebook,
   IconWhatsapp,
   IconTelegram,
   IconInstagram,
+  IconYoutube,
 } from "@/components/icons";
 
 const ICONS = {
@@ -11,6 +11,7 @@ const ICONS = {
   whatsapp: IconWhatsapp,
   telegram: IconTelegram,
   instagram: IconInstagram,
+  youtube: IconYoutube,
 } as const;
 
 /** Brand colours for the filled-circle variant (matches taazatime footer). */
@@ -19,27 +20,35 @@ const BRAND: Record<string, string> = {
   whatsapp: "#25d366",
   telegram: "#229ed2",
   instagram: "#e1306c",
+  youtube: "#ff0000",
 };
 
+export type Social = { name: string; href: string };
+
 /**
- * Row of social follow icons.
+ * Row of social follow icons (DB-driven — pass the configured links).
  * - `variant="brand"` → filled circles in each platform's brand colour.
  * - default → plain icons that inherit `currentColor`.
+ * Renders nothing when no links are configured.
  */
 export function SocialLinks({
+  socials,
   className = "",
   size = 16,
   variant = "plain",
 }: {
+  socials: Social[];
   className?: string;
   size?: number;
   variant?: "plain" | "brand";
 }) {
+  const items = socials.filter((s) => s.href && ICONS[s.name as keyof typeof ICONS]);
+  if (items.length === 0) return null;
+
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      {SOCIALS.map((s) => {
+      {items.map((s) => {
         const Icon = ICONS[s.name as keyof typeof ICONS];
-        if (!Icon) return null;
 
         if (variant === "brand") {
           return (

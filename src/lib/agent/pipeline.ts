@@ -113,10 +113,18 @@ export async function runPipeline(): Promise<PipelineResult> {
       return { status: "skipped", drafts, log, reason: "No candidate topics found today" };
     }
 
+    // Recently published titles — so the editor avoids repeating a story.
+    const { data: recentRows } = await supabase
+      .from("articles")
+      .select("title")
+      .order("created_at", { ascending: false })
+      .limit(30);
+    const recentTitles = (recentRows ?? []).map((r) => r.title as string);
+
     // STEP 2 — SELECTION
     const sel = await runStep("chunaav", {
       system: SYSTEM_EDITOR,
-      prompt: selectionPrompt(candidates, count),
+      prompt: selectionPrompt(candidates, count, recentTitles),
       maxTokens: 600,
       temperature: 0.4,
     });

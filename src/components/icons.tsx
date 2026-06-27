@@ -177,6 +177,24 @@ export function IconTelegram(p: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function IconYoutube(p: SVGProps<SVGSVGElement>) {
+  return (
+    <Brand {...p}>
+      <path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31.2 31.2 0 0 0 0 12a31.2 31.2 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31.2 31.2 0 0 0 24 12a31.2 31.2 0 0 0-.5-5.8ZM9.6 15.6V8.4l6.3 3.6-6.3 3.6Z" />
+    </Brand>
+  );
+}
+
+export function IconGlobe(p: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...p}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M2 12h20" />
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z" />
+    </Svg>
+  );
+}
+
 export function IconInstagram(p: SVGProps<SVGSVGElement>) {
   return (
     <Brand {...p}>

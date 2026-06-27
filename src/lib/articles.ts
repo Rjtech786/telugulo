@@ -81,8 +81,11 @@ export async function deleteArticle(id: string) {
   if (error) throw error;
 }
 
-/** Increment view count (best-effort, used by public pages). */
+/** Increment view count + log a timestamped event (best-effort, public pages). */
 export async function incrementViews(id: string) {
   const supabase = createAdminClient();
-  await supabase.rpc("increment_article_views", { article_id: id });
+  await Promise.all([
+    supabase.rpc("increment_article_views", { article_id: id }),
+    supabase.from("page_views").insert({ article_id: id }),
+  ]);
 }

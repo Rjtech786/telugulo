@@ -12,6 +12,7 @@ import {
   IconPlug,
   IconChart,
   IconMegaphone,
+  IconGlobe,
   IconLogout,
   IconMenu,
   IconClose,
@@ -27,29 +28,27 @@ type NavItem = {
 const NAV: NavItem[] = [
   { href: "/admin", label: "Overview", icon: IconDashboard, exact: true },
   { href: "/admin/articles", label: "Articles", icon: IconArticles },
+  { href: "/admin/analytics", label: "Analytics", icon: IconChart },
+  { href: "/admin/site", label: "Site Settings", icon: IconGlobe },
   { href: "/admin/settings", label: "AI Settings", icon: IconSettings },
   { href: "/admin/credentials", label: "Credentials", icon: IconKey },
   { href: "/admin/integrations", label: "Integrations", icon: IconPlug },
-  { href: "/admin/analytics", label: "Analytics", icon: IconChart },
   { href: "/admin/ads", label: "Ads", icon: IconMegaphone },
 ];
 
-export function AdminShell({
+function Sidebar({
   email,
-  children,
+  onNavigate,
 }: {
   email: string;
-  children: React.ReactNode;
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-
   const isActive = (item: NavItem) =>
     item.exact ? pathname === item.href : pathname.startsWith(item.href);
 
-  function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
-    return (
-      <div className="flex h-full flex-col">
+  return (
+    <div className="flex h-full flex-col">
         {/* Brand */}
         <div className="flex h-16 items-center gap-2.5 border-b border-line px-5">
           <span className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-accent text-lg font-bold text-white">
@@ -111,13 +110,22 @@ export function AdminShell({
         </div>
       </div>
     );
-  }
+}
+
+export function AdminShell({
+  email,
+  children,
+}: {
+  email: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-surface">
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-line bg-white lg:block">
-        <Sidebar />
+        <Sidebar email={email} />
       </aside>
 
       {/* Mobile drawer */}
@@ -136,7 +144,7 @@ export function AdminShell({
             >
               <IconClose className="h-5 w-5" />
             </button>
-            <Sidebar onNavigate={() => setOpen(false)} />
+            <Sidebar email={email} onNavigate={() => setOpen(false)} />
           </aside>
         </div>
       )}

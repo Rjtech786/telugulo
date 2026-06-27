@@ -1,8 +1,16 @@
 import Link from "next/link";
-import { SITE, CATEGORIES, formatDate } from "@/lib/site";
-import { SocialLinks } from "@/components/social-links";
+import { CATEGORIES, formatDate } from "@/lib/site";
+import { SocialLinks, type Social } from "@/components/social-links";
 
-export function SiteHeader() {
+export function SiteHeader({
+  name,
+  tagline,
+  socials,
+}: {
+  name: string;
+  tagline: string;
+  socials: Social[];
+}) {
   const today = formatDate(new Date().toISOString());
 
   return (
@@ -16,18 +24,18 @@ export function SiteHeader() {
             </span>
             <span>
               <span className="block text-[22px] font-extrabold leading-none tracking-tight text-ink">
-                {SITE.name}
+                {name}
               </span>
               <span className="block text-[11px] font-medium text-ink-soft">
-                {SITE.tagline}
+                {tagline}
               </span>
             </span>
           </Link>
 
           <div className="hidden items-center gap-3 sm:flex">
             <span className="text-[12px] text-ink-mute">{today}</span>
-            <span className="h-4 w-px bg-line" />
-            <SocialLinks variant="brand" size={16} />
+            {socials.length > 0 && <span className="h-4 w-px bg-line" />}
+            <SocialLinks socials={socials} variant="brand" size={16} />
           </div>
         </div>
       </div>

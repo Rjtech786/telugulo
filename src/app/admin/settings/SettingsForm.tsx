@@ -14,6 +14,7 @@ import {
   type CostSettings,
 } from "@/lib/config";
 import type { ModelMap } from "@/lib/settings";
+import { Card, SaveBar, Toggle, Field, selectCls, inputCls } from "../_ui";
 import { saveModels, saveFeatures, saveGeneral, saveCost } from "./actions";
 
 type Props = {
@@ -26,7 +27,7 @@ type Props = {
 
 export function SettingsForm(props: Props) {
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <ModelsSection
         initialModels={props.initialModels}
         initialImageProvider={props.initialImageProvider}
@@ -37,51 +38,6 @@ export function SettingsForm(props: Props) {
     </div>
   );
 }
-
-// ─── Shared bits ───
-function Section({
-  title,
-  desc,
-  children,
-}: {
-  title: string;
-  desc: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-2xl border border-neutral-200 bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900">
-      <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-      <p className="mb-4 text-sm text-neutral-500">{desc}</p>
-      {children}
-    </section>
-  );
-}
-
-function SaveBar({
-  onSave,
-  pending,
-  status,
-}: {
-  onSave: () => void;
-  pending: boolean;
-  status: string | null;
-}) {
-  return (
-    <div className="mt-4 flex items-center gap-3">
-      <button
-        onClick={onSave}
-        disabled={pending}
-        className="rounded-lg bg-neutral-900 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-      >
-        {pending ? "Saving…" : "Save"}
-      </button>
-      {status && <span className="text-xs text-green-600 dark:text-green-400">{status}</span>}
-    </div>
-  );
-}
-
-const selectCls =
-  "rounded-lg border border-neutral-300 bg-transparent px-2 py-1.5 text-sm outline-none focus:border-neutral-900 dark:border-neutral-700 dark:focus:border-neutral-100";
 
 // ─── 1. Per-step models ───
 function ModelsSection({
@@ -105,13 +61,13 @@ function ModelsSection({
   }
 
   return (
-    <Section
+    <Card
       title="AI models — per step"
-      desc="Each pipeline step has its own model. Cheap (Haiku) for discovery/selection/learning; quality (Opus) only for writing & angle — this roughly halves cost."
+      desc="Each pipeline step has its own model. Cheap models for discovery/selection; the quality model only for writing — this roughly halves cost."
     >
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="text-left text-xs text-neutral-500">
+          <thead className="text-left text-xs text-ink-mute">
             <tr>
               <th className="pb-2 pr-4 font-medium">Step</th>
               <th className="pb-2 pr-4 font-medium">Provider</th>
@@ -122,10 +78,10 @@ function ModelsSection({
             {PIPELINE_STEPS.map((step) => {
               const choice = models[step.key];
               return (
-                <tr key={step.key} className="border-t border-neutral-100 dark:border-neutral-800">
+                <tr key={step.key} className="border-t border-line">
                   <td className="py-2 pr-4">
-                    <div className="font-medium">{step.label}</div>
-                    <div className="text-xs text-neutral-500">{step.hint}</div>
+                    <div className="font-medium text-ink">{step.label}</div>
+                    <div className="text-xs text-ink-mute">{step.hint}</div>
                   </td>
                   <td className="py-2 pr-4">
                     <select
@@ -157,7 +113,7 @@ function ModelsSection({
       </div>
 
       <div className="mt-4 flex items-center gap-3">
-        <label className="text-sm font-medium">Image provider</label>
+        <label className="text-sm font-medium text-ink">Image provider</label>
         <select
           value={imageProvider}
           onChange={(e) => setImageProvider(e.target.value as ImageProvider)}
@@ -176,10 +132,11 @@ function ModelsSection({
           start(async () => {
             await saveModels(models, imageProvider);
             setStatus("Saved ✓");
+            setTimeout(() => setStatus(null), 3000);
           })
         }
       />
-    </Section>
+    </Card>
   );
 }
 
@@ -194,29 +151,19 @@ function FeaturesSection({
   const [status, setStatus] = useState<string | null>(null);
 
   return (
-    <Section
+    <Card
       title="Feature toggles"
-      desc="OFF features are completely dormant — no API calls, zero cost. Start with core only; enable more as traffic/data builds."
+      desc="OFF features are completely dormant — no API calls, zero cost. Enable more as traffic/data builds."
     >
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-2.5 sm:grid-cols-2">
         {FEATURES.map((f) => (
-          <label
+          <Toggle
             key={f.key}
-            className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-neutral-200 px-3 py-2.5 dark:border-neutral-800"
-          >
-            <span>
-              <span className="text-sm font-medium">{f.label}</span>
-              <span className="block text-xs text-neutral-500">{f.hint}</span>
-            </span>
-            <input
-              type="checkbox"
-              checked={features[f.key]}
-              onChange={(e) =>
-                setFeatures((s) => ({ ...s, [f.key]: e.target.checked }))
-              }
-              className="h-5 w-5 accent-neutral-900 dark:accent-white"
-            />
-          </label>
+            label={f.label}
+            hint={f.hint}
+            checked={features[f.key]}
+            onChange={(v) => setFeatures((s) => ({ ...s, [f.key]: v }))}
+          />
         ))}
       </div>
       <SaveBar
@@ -226,10 +173,11 @@ function FeaturesSection({
           start(async () => {
             await saveFeatures(features);
             setStatus("Saved ✓");
+            setTimeout(() => setStatus(null), 3000);
           })
         }
       />
-    </Section>
+    </Card>
   );
 }
 
@@ -240,35 +188,30 @@ function GeneralSection({ initialGeneral }: { initialGeneral: GeneralSettings })
   const [status, setStatus] = useState<string | null>(null);
 
   return (
-    <Section title="General" desc="Publishing cadence, tone, length and time.">
+    <Card title="General" desc="Publishing cadence, tone, length and run time.">
       <div className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label className="text-sm font-medium">Articles per day</label>
+        <Field label="Articles per day">
           <select
             value={g.articles_per_day}
             onChange={(e) => setG({ ...g, articles_per_day: Number(e.target.value) === 2 ? 2 : 1 })}
-            className={`${selectCls} mt-1 block`}
+            className={`${selectCls} block w-full`}
           >
             <option value={1}>1</option>
             <option value={2}>2</option>
           </select>
-        </div>
-        <div>
-          <label className="text-sm font-medium">Tone</label>
+        </Field>
+        <Field label="Tone">
           <select
             value={g.tone}
             onChange={(e) => setG({ ...g, tone: e.target.value as GeneralSettings["tone"] })}
-            className={`${selectCls} mt-1 block`}
+            className={`${selectCls} block w-full`}
           >
             <option value="friendly">Friendly</option>
             <option value="professional">Professional</option>
             <option value="casual">Casual</option>
           </select>
-        </div>
-        <div>
-          <label className="text-sm font-medium">
-            Article length: {g.article_length} words
-          </label>
+        </Field>
+        <Field label={`Article length: ${g.article_length} words`}>
           <input
             type="range"
             min={400}
@@ -276,35 +219,27 @@ function GeneralSection({ initialGeneral }: { initialGeneral: GeneralSettings })
             step={50}
             value={g.article_length}
             onChange={(e) => setG({ ...g, article_length: Number(e.target.value) })}
-            className="mt-2 block w-full accent-neutral-900 dark:accent-white"
+            className="mt-2 block w-full accent-[var(--color-accent)]"
           />
-        </div>
-        <div>
-          <label className="text-sm font-medium">Daily run time (IST)</label>
+        </Field>
+        <Field label="Daily run time (IST)">
           <input
             type="time"
             value={g.publish_time}
             onChange={(e) => setG({ ...g, publish_time: e.target.value })}
-            className={`${selectCls} mt-1 block`}
+            className={`${inputCls}`}
           />
-        </div>
+        </Field>
       </div>
 
-      <label className="mt-4 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-neutral-200 px-3 py-2.5 dark:border-neutral-800">
-        <span>
-          <span className="text-sm font-medium">Auto-publish</span>
-          <span className="block text-xs text-neutral-500">
-            ON = articles go live automatically (no review). OFF = saved as
-            drafts for your approval.
-          </span>
-        </span>
-        <input
-          type="checkbox"
+      <div className="mt-4">
+        <Toggle
+          label="Auto-publish"
+          hint="ON = articles go live automatically (no review). OFF = saved as drafts for approval."
           checked={g.auto_publish}
-          onChange={(e) => setG({ ...g, auto_publish: e.target.checked })}
-          className="h-5 w-5 accent-neutral-900 dark:accent-white"
+          onChange={(v) => setG({ ...g, auto_publish: v })}
         />
-      </label>
+      </div>
 
       <SaveBar
         pending={pending}
@@ -313,10 +248,11 @@ function GeneralSection({ initialGeneral }: { initialGeneral: GeneralSettings })
           start(async () => {
             await saveGeneral(g);
             setStatus("Saved ✓");
+            setTimeout(() => setStatus(null), 3000);
           })
         }
       />
-    </Section>
+    </Card>
   );
 }
 
@@ -327,47 +263,42 @@ function CostSection({ initialCost }: { initialCost: CostSettings }) {
   const [status, setStatus] = useState<string | null>(null);
 
   return (
-    <Section
+    <Card
       title="Cost control"
       desc="Monthly budget alert, learning examples limit, and how often performance analysis runs."
     >
       <div className="grid gap-4 sm:grid-cols-3">
-        <div>
-          <label className="text-sm font-medium">Monthly budget (₹)</label>
+        <Field label="Monthly budget (₹)">
           <input
             type="number"
             min={0}
             value={c.monthly_budget}
             onChange={(e) => setC({ ...c, monthly_budget: Number(e.target.value) })}
-            className={`${selectCls} mt-1 block w-full`}
+            className={inputCls}
           />
-        </div>
-        <div>
-          <label className="text-sm font-medium">Learning examples limit</label>
+        </Field>
+        <Field label="Learning examples limit">
           <input
             type="number"
             min={0}
             max={10}
             value={c.learning_examples_limit}
-            onChange={(e) =>
-              setC({ ...c, learning_examples_limit: Number(e.target.value) })
-            }
-            className={`${selectCls} mt-1 block w-full`}
+            onChange={(e) => setC({ ...c, learning_examples_limit: Number(e.target.value) })}
+            className={inputCls}
           />
-        </div>
-        <div>
-          <label className="text-sm font-medium">Performance analysis</label>
+        </Field>
+        <Field label="Performance analysis">
           <select
             value={c.performance_frequency}
             onChange={(e) =>
               setC({ ...c, performance_frequency: e.target.value as CostSettings["performance_frequency"] })
             }
-            className={`${selectCls} mt-1 block w-full`}
+            className={`${selectCls} block w-full`}
           >
             <option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option>
           </select>
-        </div>
+        </Field>
       </div>
       <SaveBar
         pending={pending}
@@ -376,9 +307,10 @@ function CostSection({ initialCost }: { initialCost: CostSettings }) {
           start(async () => {
             await saveCost(c);
             setStatus("Saved ✓");
+            setTimeout(() => setStatus(null), 3000);
           })
         }
       />
-    </Section>
+    </Card>
   );
 }

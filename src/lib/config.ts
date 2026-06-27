@@ -162,6 +162,42 @@ export const DEFAULT_INTEGRATIONS: Integrations = {
   head_html: "",
 };
 
+// ─── Public site settings (chrome shown to readers) ───
+export const SOCIAL_KEYS = [
+  "facebook",
+  "whatsapp",
+  "telegram",
+  "instagram",
+  "youtube",
+] as const;
+export type SocialKey = (typeof SOCIAL_KEYS)[number];
+
+export const SOCIAL_META: { key: SocialKey; label: string; placeholder: string }[] = [
+  { key: "facebook", label: "Facebook", placeholder: "https://facebook.com/telugulo" },
+  { key: "whatsapp", label: "WhatsApp", placeholder: "https://whatsapp.com/channel/…" },
+  { key: "telegram", label: "Telegram", placeholder: "https://t.me/telugulo" },
+  { key: "instagram", label: "Instagram", placeholder: "https://instagram.com/telugulo.in" },
+  { key: "youtube", label: "YouTube", placeholder: "https://youtube.com/@telugulo" },
+];
+
+export type SiteSettings = {
+  name: string;
+  tagline: string;
+  description: string;
+  footer_about: string;
+  socials: Record<SocialKey, string>;
+};
+
+export const DEFAULT_SITE_SETTINGS: SiteSettings = {
+  name: "telugulo.in",
+  tagline: "టెక్ న్యూస్ తెలుగులో",
+  description:
+    "రోజువారీ టెక్ న్యూస్, AI, gadgets — తెలుగులో. తాజా technology వార్తలు simple Telugu lo.",
+  footer_about:
+    "telugulo.in: మీ నమ్మకమైన టెక్ న్యూస్ ప్లాట్‌ఫామ్ — AI, gadgets, mobile, internet వంటి విభాగాల్లో రోజువారీ తాజా & విశ్వసనీయ వార్తలు తెలుగులో. 🚀",
+  socials: { facebook: "", whatsapp: "", telegram: "", instagram: "", youtube: "" },
+};
+
 // Settings table keys
 export const SETTINGS_KEYS = {
   models: "ai_models",
@@ -170,4 +206,5 @@ export const SETTINGS_KEYS = {
   general: "general",
   cost: "cost",
   integrations: "integrations",
+  site: "site",
 } as const;

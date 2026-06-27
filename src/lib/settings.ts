@@ -5,6 +5,8 @@ import {
   FEATURES,
   DEFAULT_GENERAL,
   DEFAULT_COST,
+  DEFAULT_SITE_SETTINGS,
+  SOCIAL_KEYS,
   SETTINGS_KEYS,
   type StepKey,
   type TextProvider,
@@ -13,6 +15,7 @@ import {
   type GeneralSettings,
   type CostSettings,
   type Integrations,
+  type SiteSettings,
 } from "@/lib/config";
 
 /**
@@ -84,6 +87,33 @@ export async function getCost(): Promise<CostSettings> {
     SETTINGS_KEYS.cost,
   )) ?? {};
   return { ...DEFAULT_COST, ...saved };
+}
+
+/**
+ * Public site settings (name, tagline, description, footer, social links).
+ * Merged over code defaults; empty social URLs are simply not rendered.
+ */
+export async function getSiteSettings(): Promise<SiteSettings> {
+  const saved = (await readSetting<Partial<SiteSettings>>(SETTINGS_KEYS.site)) ?? {};
+  const socials = { ...DEFAULT_SITE_SETTINGS.socials };
+  for (const k of SOCIAL_KEYS) {
+    const v = saved.socials?.[k];
+    if (typeof v === "string") socials[k] = v.trim();
+  }
+  return {
+    name: saved.name?.trim() || DEFAULT_SITE_SETTINGS.name,
+    tagline: saved.tagline?.trim() || DEFAULT_SITE_SETTINGS.tagline,
+    description: saved.description?.trim() || DEFAULT_SITE_SETTINGS.description,
+    footer_about: saved.footer_about?.trim() || DEFAULT_SITE_SETTINGS.footer_about,
+    socials,
+  };
+}
+
+/** Social links as a render-ready array (empty URLs dropped). */
+export function socialsArray(s: SiteSettings): { name: string; href: string }[] {
+  return SOCIAL_KEYS.map((k) => ({ name: k, href: s.socials[k] })).filter(
+    (x) => x.href,
+  );
 }
 
 /**

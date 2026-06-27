@@ -16,42 +16,49 @@ export default async function AnalyticsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-2xl font-bold tracking-tight text-ink">Analytics</h1>
+        <p className="text-sm text-ink-soft">
           Top articles, plus the agent&apos;s honest winner analysis. With few
           articles, patterns are guesses — confidence grows with data.
         </p>
       </div>
 
-      <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="rounded-xl border border-line bg-white px-4 py-3 text-sm text-ink-soft">
         Google Analytics:{" "}
         {gaConfigured ? (
-          <span className="text-green-600 dark:text-green-400">connected ✓</span>
+          <span className="font-medium text-green-600">connected ✓</span>
         ) : (
-          <span className="text-amber-600">not set</span>
+          <span className="font-medium text-amber-600">not set</span>
         )}
         . Add GA, Search Console &amp; AdSense codes in{" "}
-        <Link href="/admin/integrations" className="underline">
+        <Link href="/admin/integrations" className="font-medium text-accent underline">
           Integrations
         </Link>
         , then submit <code>/sitemap.xml</code> in Search Console.
       </div>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">
-          Top articles by views
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-mute">
+          Top articles by views (all time)
         </h2>
         {top.length === 0 ? (
-          <p className="text-sm text-neutral-500">No published articles yet.</p>
+          <p className="text-sm text-ink-mute">No published articles yet.</p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800">
+          <div className="overflow-hidden rounded-2xl border border-line bg-white">
             {top.map((a, i) => (
               <div
                 key={i}
-                className="flex items-center justify-between gap-3 border-b border-neutral-100 px-4 py-2 text-sm last:border-0 dark:border-neutral-800"
+                className="flex items-center justify-between gap-3 border-b border-line px-4 py-2.5 text-sm last:border-0"
               >
-                <span className="truncate">{a.title}</span>
-                <span className="flex-none text-neutral-500">{a.views} views</span>
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex h-5 w-5 flex-none items-center justify-center rounded bg-accent-soft text-xs font-bold text-accent">
+                    {i + 1}
+                  </span>
+                  <span className="truncate text-ink">{a.title}</span>
+                </span>
+                <span className="flex-none font-semibold tabular-nums text-ink-soft">
+                  {a.views}
+                </span>
               </div>
             ))}
           </div>
@@ -60,25 +67,25 @@ export default async function AnalyticsPage() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-mute">
             Winner analysis
           </h2>
           <RunAnalysis />
         </div>
         {insights.length === 0 ? (
-          <p className="text-sm text-neutral-500">
+          <p className="text-sm text-ink-mute">
             No analysis yet. Enable “Performance analysis” in Settings, then run it.
           </p>
         ) : (
           insights.map((ins) => (
             <div
               key={ins.id}
-              className="rounded-xl border border-neutral-200 bg-white p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900"
+              className="rounded-2xl border border-line bg-white p-4 text-sm"
             >
-              <div className="text-xs text-neutral-400">{ins.week}</div>
-              {ins.patterns && <p className="mt-1">{ins.patterns}</p>}
+              <div className="text-xs text-ink-mute">{ins.week}</div>
+              {ins.patterns && <p className="mt-1 text-ink">{ins.patterns}</p>}
               {ins.suggestions && (
-                <p className="mt-2 whitespace-pre-line text-neutral-600 dark:text-neutral-400">
+                <p className="mt-2 whitespace-pre-line text-ink-soft">
                   {ins.suggestions}
                 </p>
               )}
