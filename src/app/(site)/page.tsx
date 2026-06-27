@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { listPublished, type PublicArticle } from "@/lib/public";
-import { ArticleCard, CategoryBadge } from "@/components/article-card";
+import { listPublished, listTrending, type PublicArticle } from "@/lib/public";
+import { ArticleCard, ArticleListItem } from "@/components/article-card";
 import { Thumb } from "@/components/thumb";
-import { formatDate, categoryLabel, SITE } from "@/lib/site";
+import { formatDate, CATEGORIES, SITE } from "@/lib/site";
 
 export const revalidate = 300;
 
@@ -23,21 +23,20 @@ const siteJsonLd = {
       "@id": `${SITE.url}/#organization`,
       name: SITE.organization.name,
       url: `${SITE.url}/`,
-      logo: {
-        "@type": "ImageObject",
-        url: `${SITE.url}${SITE.organization.logo}`,
-      },
+      logo: { "@type": "ImageObject", url: `${SITE.url}${SITE.organization.logo}` },
     },
   ],
 };
 
 export default async function HomePage() {
-  const articles = await listPublished(30);
+  const [articles, trending] = await Promise.all([
+    listPublished(60),
+    listTrending(5),
+  ]);
 
   if (articles.length === 0) {
     return (
-      <div className="py-4">
-        <HeroStrip />
+      <div className="py-10">
         <div className="rounded-xl border border-dashed border-line px-4 py-16 text-center text-ink-soft">
           <p>ఇంకా articles publish కాలేదు.</p>
           <Link href="/admin" className="mt-2 inline-block text-sm text-accent underline">
@@ -49,101 +48,156 @@ export default async function HomePage() {
   }
 
   const [featured, ...rest] = articles;
-  const side = rest.slice(0, 3);
-  const grid = rest.slice(3);
+  const topList = rest.slice(0, 3);
+  const used = new Set([featured.id, ...topList.map((a) => a.id)]);
+
+  const latest = articles.filter((a) => !used.has(a.id)).slice(0, 8);
+  latest.forEach((a) => used.add(a.id));
+
+  const sections = CATEGORIES.map((c) => ({
+    cat: c,
+    items: articles
+      .filter((a) => a.category === c.slug && !used.has(a.id))
+      .slice(0, 4),
+  })).filter((s) => s.items.length > 0);
+  sections.forEach((s) => s.items.forEach((a) => used.add(a.id)));
+
+  const stories = articles.slice(0, 5);
 
   return (
-    <div className="py-1">
+    <div className="py-5">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(siteJsonLd) }}
       />
-      <HeroStrip />
 
-      {/* Featured */}
-      <div
-        className={`mb-9 grid gap-6 ${side.length ? "lg:grid-cols-[1.4fr_1fr]" : ""}`}
-      >
-        <Link
-          href={`/${featured.slug}`}
-          className="group overflow-hidden rounded-2xl border border-line bg-white transition duration-200 hover:border-neutral-300 hover:shadow-[0_12px_28px_rgba(0,0,0,0.08)] [&_img]:transition-transform [&_img]:duration-500 hover:[&_img]:scale-105"
-        >
+      {/* ── Featured: 3-column top ── */}
+      <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr_1.05fr]">
+        {/* Big featured */}
+        <Link href={`/${featured.slug}`} className="group block">
           <Thumb
             src={featured.image_url}
             alt={featured.title}
             seed={featured.id}
-            className="h-[300px] w-full"
-            sizes="(max-width: 840px) 100vw, 600px"
+            className="h-[230px] w-full rounded-lg sm:h-[300px] [&_img]:transition-transform [&_img]:duration-500 group-hover:[&_img]:scale-105"
+            sizes="(max-width: 840px) 100vw, 460px"
             priority
           />
-          <div className="p-6">
-            <CategoryBadge slug={featured.category} />
-            <h2 className="mt-3 font-serif text-[26px] font-bold leading-tight text-ink transition-colors group-hover:text-accent">
-              {featured.title}
-            </h2>
-            {featured.summary && (
-              <p className="mt-2.5 leading-relaxed text-ink-soft">{featured.summary}</p>
-            )}
-            <div className="mt-4 text-xs font-medium text-ink-mute">
-              telugulo team · {formatDate(featured.published_at)}
-            </div>
-          </div>
+          <h2 className="mt-3 text-[21px] font-extrabold leading-tight text-ink transition-colors group-hover:text-accent sm:text-[24px]">
+            {featured.title}
+          </h2>
+          {featured.summary && (
+            <p className="mt-2 line-clamp-2 text-[14px] leading-relaxed text-ink-soft">
+              {featured.summary}
+            </p>
+          )}
+          <p className="mt-2 text-[11px] font-medium text-ink-mute">
+            {formatDate(featured.published_at)}
+          </p>
         </Link>
 
-        {side.length > 0 && (
-          <div className="flex flex-col gap-4">
-            {side.map((a) => (
-              <SideItem key={a.id} a={a} />
+        {/* Middle list */}
+        <div className="flex flex-col">
+          {topList.map((a) => (
+            <ArticleListItem key={a.id} a={a} />
+          ))}
+        </div>
+
+        {/* Trending section */}
+        <section>
+          <SectionHeader title="ట్రెండింగ్" />
+          <div>
+            {trending.map((a, i) => (
+              <ArticleListItem key={a.id} a={a} rank={i + 1} />
             ))}
           </div>
-        )}
+        </section>
       </div>
 
-      {/* Latest grid */}
-      <h2 className="mb-6 inline-block border-b-[3px] border-accent pb-2 font-serif text-xl font-bold text-ink">
-        తాజా వార్తలు
-      </h2>
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {(grid.length ? grid : rest).map((a) => (
-          <ArticleCard key={a.id} a={a} />
+      {/* ── Latest: full-width 4-column row ── */}
+      <section className="mt-10">
+        <SectionHeader title="తాజా వార్తలు" />
+        <div className="grid grid-cols-2 gap-x-6 gap-y-7 sm:grid-cols-3 lg:grid-cols-4">
+          {latest.map((a) => (
+            <ArticleCard key={a.id} a={a} />
+          ))}
+        </div>
+      </section>
+
+      {/* ── Per-category section blocks (3-column grid) ── */}
+      {sections.length > 0 && (
+        <div className="mt-10 grid gap-x-9 gap-y-10 md:grid-cols-2 lg:grid-cols-3">
+          {sections.map((s) => (
+            <section key={s.cat.slug}>
+              <SectionHeader title={s.cat.label} href={`/category/${s.cat.slug}`} />
+              <div>
+                {s.items.map((a) => (
+                  <ArticleListItem key={a.id} a={a} />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+
+      {/* ── Web Stories ── */}
+      <WebStories items={stories} />
+    </div>
+  );
+}
+
+/* ─── Section header: red icon + bold title + red "›" + circle link ─── */
+function SectionHeader({ title, href }: { title: string; href?: string }) {
+  return (
+    <div className="mb-3.5 flex items-center gap-2 border-b-2 border-line pb-2">
+      <span className="h-5 w-[5px] rounded-full bg-accent" />
+      <h2 className="text-[18px] font-extrabold text-ink">{title}</h2>
+      <span className="text-[18px] font-bold leading-none text-accent">›</span>
+      {href && (
+        <Link
+          href={href}
+          aria-label={`${title} మరిన్ని`}
+          className="ml-auto grid h-6 w-6 place-items-center rounded-full border-2 border-accent text-[13px] font-bold text-accent transition hover:bg-accent hover:text-white"
+        >
+          ›
+        </Link>
+      )}
+    </div>
+  );
+}
+
+/* ─── Web Stories (dark maroon block, portrait cards) ─── */
+function WebStories({ items }: { items: PublicArticle[] }) {
+  if (items.length === 0) return null;
+  return (
+    <section className="mt-12 rounded-xl bg-story p-5 text-white sm:p-7">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-[20px] font-extrabold">Web Stories</h2>
+        <Link href="/" className="text-[13px] font-semibold text-white/80 hover:text-white">
+          Watch More ▸
+        </Link>
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+        {items.map((a) => (
+          <Link
+            key={a.id}
+            href={`/${a.slug}`}
+            className="group relative block aspect-[3/4] overflow-hidden rounded-lg"
+          >
+            <Thumb
+              src={a.image_url}
+              alt={a.title}
+              seed={a.id}
+              className="h-full w-full [&_img]:transition-transform [&_img]:duration-500 group-hover:[&_img]:scale-105"
+              sizes="(max-width: 640px) 50vw, 220px"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent" />
+            <h3 className="absolute inset-x-0 bottom-0 line-clamp-3 p-2.5 text-[12px] font-bold leading-snug text-white">
+              {a.title}
+            </h3>
+          </Link>
         ))}
       </div>
-    </div>
-  );
-}
-
-function HeroStrip() {
-  const today = formatDate(new Date().toISOString());
-  return (
-    <div className="mb-6 border-b border-line pb-4 pt-5">
-      <h1 className="text-[15px] font-medium text-ink-soft">
-        📅 {today} · తాజా టెక్నాలజీ వార్తలు
-      </h1>
-    </div>
-  );
-}
-
-function SideItem({ a }: { a: PublicArticle }) {
-  return (
-    <Link
-      href={`/${a.slug}`}
-      className="group flex gap-3 border-b border-line pb-4 last:border-0 last:pb-0"
-    >
-      <Thumb
-        src={a.image_url}
-        alt={a.title}
-        seed={a.id}
-        className="h-16 w-[84px] flex-shrink-0 rounded-lg"
-        sizes="84px"
-      />
-      <div className="min-w-0">
-        <h3 className="line-clamp-2 font-serif text-[15px] font-bold leading-snug text-ink transition-colors group-hover:text-accent">
-          {a.title}
-        </h3>
-        <div className="mt-1.5 text-[11px] font-medium text-ink-mute">
-          {categoryLabel(a.category)} · {formatDate(a.published_at)}
-        </div>
-      </div>
-    </Link>
+    </section>
   );
 }

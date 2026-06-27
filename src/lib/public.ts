@@ -51,6 +51,18 @@ export async function listPublished(limit = 30): Promise<PublicArticle[]> {
   return (data as PublicArticle[]) ?? [];
 }
 
+export async function listTrending(limit = 6): Promise<PublicArticle[]> {
+  const { data } = await publicClient()
+    .from("articles")
+    .select(
+      "id, slug, title, summary, category, image_url, published_at, created_at, views",
+    )
+    .eq("status", "published")
+    .order("views", { ascending: false })
+    .limit(limit);
+  return (data as PublicArticle[]) ?? [];
+}
+
 export async function listByCategory(category: string, limit = 30) {
   const { data } = await publicClient()
     .from("articles")

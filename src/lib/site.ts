@@ -27,6 +27,17 @@ export function categoryLabel(slug: string | null): string {
   return CATEGORIES.find((c) => c.slug === slug)?.label ?? slug;
 }
 
+/**
+ * Social follow links shown in the header utility bar + footer.
+ * ⚠️ Owner: update these hrefs to the real telugulo.in handles.
+ */
+export const SOCIALS: { name: string; href: string }[] = [
+  { name: "facebook", href: "https://facebook.com/telugulo" },
+  { name: "whatsapp", href: "https://whatsapp.com/channel/telugulo" },
+  { name: "telegram", href: "https://t.me/telugulo" },
+  { name: "instagram", href: "https://instagram.com/telugulo.in" },
+];
+
 export const FOOTER_PAGES: { href: string; label: string }[] = [
   { href: "/about", label: "About" },
   { href: "/contact", label: "Contact" },

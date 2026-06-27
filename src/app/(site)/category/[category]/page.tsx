@@ -32,12 +32,17 @@ export default async function CategoryPage({
   const articles = await listByCategory(category);
 
   return (
-    <div className="space-y-5">
-      <h1 className="text-2xl font-bold tracking-tight">{cat.label}</h1>
+    <div className="py-6">
+      <div className="mb-6 flex items-center gap-3">
+        <span className="h-7 w-1.5 rounded-full bg-accent" />
+        <h1 className="text-[26px] font-extrabold tracking-tight text-ink">
+          {cat.label}
+        </h1>
+      </div>
       {articles.length === 0 ? (
-        <p className="text-neutral-500">ఈ category lo ఇంకా articles లేవు.</p>
+        <p className="text-ink-soft">ఈ category lo ఇంకా articles లేవు.</p>
       ) : (
-        <div className="grid gap-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {articles.map((a) => (
             <ArticleCard key={a.id} a={a} />
           ))}
