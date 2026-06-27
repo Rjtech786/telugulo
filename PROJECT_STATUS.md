@@ -45,7 +45,8 @@ src/
                        integrations, analytics, ads, articles/[id] (editor), _ui.tsx (shared)
     api/cron/generate  daily trigger (POST, Bearer CRON_SECRET)
     api/telegram/webhook, api/views
-    sitemap.ts, robots.ts, feed.xml, news-sitemap.xml, manifest.ts, icon/apple-icon/opengraph-image
+    sitemap.ts, robots.ts, feed.xml, news-sitemap.xml, stories-sitemap.xml,
+    web-stories/[slug] (AMP Google Web Story), manifest.ts, icon/apple-icon/opengraph-image
     proxy.ts           auth guard for /admin (Next 16 renamed middleware→proxy)
   lib/
     ai/                text.ts, image.ts, index.ts (runStep/runImage, key fallback dalle→openai)
@@ -120,7 +121,7 @@ cd telugulo-next && git pull && npm install && npm run build && pm2 reload telug
 ## 13. Remaining TODOs
 - [ ] Cloudflare: switch A + www to **proxied (orange)** + SSL mode **Full (Strict)** for CDN/speed
 - [ ] GA4: create property → Measurement ID `G-XXXX` → Admin → Integrations
-- [ ] GSC: submit `sitemap.xml` + `news-sitemap.xml`
+- [ ] GSC: submit `sitemap.xml` + `news-sitemap.xml` + `stories-sitemap.xml` (Web Stories) — **prerequisite for Google Discover**
 - [ ] Google Publisher Center (News) — add RSS `https://telugulo.in/feed.xml`
 - [ ] AdSense (after traffic) → publisher id in Integrations
 - [ ] (optional) Telegram bot for draft approval; make GitHub repo private
