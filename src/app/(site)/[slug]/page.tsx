@@ -7,7 +7,7 @@ import { ViewPing } from "@/components/view-ping";
 import { AdSlot } from "@/components/ad-slot";
 import { Thumb } from "@/components/thumb";
 import { CategoryBadge } from "@/components/article-card";
-import { SITE, formatDate } from "@/lib/site";
+import { SITE, formatDate, formatDateTime } from "@/lib/site";
 
 export const revalidate = 300;
 
@@ -147,8 +147,15 @@ export default async function ArticlePage({
             )}
           </span>
           <time dateTime={a.published_at ?? undefined}>
-            {formatDate(a.published_at)} · {readMins(a.body)} నిమి చదవండి
+            {formatDateTime(a.published_at)}
           </time>
+          <span className="block text-ink-mute">
+            {readMins(a.body)} నిమి చదవండి
+            {a.updated_at &&
+              a.published_at &&
+              new Date(a.updated_at).getTime() - new Date(a.published_at).getTime() >
+                120000 && <> · నవీకరించబడింది {formatDate(a.updated_at)}</>}
+          </span>
         </span>
       </div>
 
@@ -172,7 +179,14 @@ export default async function ArticlePage({
         </Link>
       </div>
 
-      <AdSlot category={a.category} />
+      <AdSlot
+        target={{
+          category: a.category,
+          title: a.title,
+          summary: a.summary,
+          body: a.body,
+        }}
+      />
 
       {author?.bio && (
         <div className="mt-8 rounded-xl border border-line bg-surface p-4 text-sm">

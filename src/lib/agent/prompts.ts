@@ -126,6 +126,29 @@ ${body}
 Respond with ONLY the improved article text (keep its markdown) — no preamble, no JSON.`;
 }
 
+// ─── Ads: AI ad-copy composer (image + link + keywords → polished ad) ───
+export const AD_SYSTEM = `You write short, punchy ad copy in hybrid Telugu (keep tech/brand words in English) for telugulo.in sponsored placements. Natural and catchy, never spammy or clickbait. You always reply in the exact JSON requested.`;
+
+export function adCopyPrompt(input: {
+  title?: string;
+  keywords: string[];
+  link: string;
+}): string {
+  return `Create ad copy for a sponsored placement shown INSIDE Telugu tech articles. There is an accompanying product/banner image, so the copy should complement a visual.
+
+Advertiser / product: ${input.title || "(not given — infer from keywords/link)"}
+Target keywords: ${input.keywords.join(", ") || "(none)"}
+Destination link: ${input.link}
+
+Write:
+- headline: catchy hybrid-Telugu headline, max 8 words (no clickbait)
+- description: ONE short hybrid-Telugu line (max 15 words) with the benefit/offer
+- cta: 2-3 word Telugu button text (e.g. "ఇప్పుడే చూడండి", "కొనండి", "తెలుసుకోండి")
+
+Respond ONLY with JSON (no markdown):
+{"headline":"...","description":"...","cta":"..."}`;
+}
+
 export function imagePrompt(headline: string, category: string): string {
   // English prompt for the image model. Editorial, clean, no text-in-image.
   return `Editorial news header image for a technology article about: "${headline}". Category: ${category}. Modern, clean, professional tech-journalism style, soft studio lighting, vibrant but tasteful colors, landscape 16:9 composition. No text, no words, no watermark, no logos.`;

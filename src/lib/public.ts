@@ -26,6 +26,7 @@ export type PublicArticle = {
   author_id: string | null;
   published_at: string | null;
   created_at: string;
+  updated_at?: string | null;
   views: number;
 };
 

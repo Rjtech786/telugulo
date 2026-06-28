@@ -66,5 +66,21 @@ export function formatDate(iso: string | null): string {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: "Asia/Kolkata",
   });
+}
+
+/** Date + time in IST — shown on article pages (publish time helps news SEO). */
+export function formatDateTime(iso: string | null): string {
+  if (!iso) return "";
+  const s = new Date(iso).toLocaleString("te-IN", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Kolkata",
+  });
+  return `${s} IST`;
 }
