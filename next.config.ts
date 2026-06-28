@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
   trailingSlash: true,
   // Hide the on-screen Next.js dev indicator (bottom-left "N" badge).
   devIndicators: false,
+  // Allow ad-image uploads via Server Actions (default body limit is 1 MB).
+  experimental: { serverActions: { bodySizeLimit: "8mb" } },
   images: {
     // Serve modern formats (AVIF first, then WebP) for the smallest payloads.
     formats: ["image/avif", "image/webp"],

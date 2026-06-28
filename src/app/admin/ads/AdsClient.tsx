@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
-import { addAd, toggleAd, removeAd, generateAdCopy } from "./actions";
+import { addAd, toggleAd, removeAd, generateAdCopy, uploadAdImage } from "./actions";
 import { Card, Field, inputCls } from "../_ui";
 import type { Ad } from "@/lib/ads";
 
@@ -21,10 +21,25 @@ export function AdsClient({ ads }: { ads: Ad[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [gen, setGen] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY);
 
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  function onFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+    setErr(null);
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    uploadAdImage(fd)
+      .then(({ url }) => setForm((s) => ({ ...s, image_url: url })))
+      .catch((er) => setErr(er instanceof Error ? er.message : "Upload failed"))
+      .finally(() => setUploading(false));
+  }
 
   function aiGenerate() {
     setErr(null);
@@ -66,8 +81,18 @@ export function AdsClient({ ads }: { ads: Ad[] }) {
           <Field label="Link (https://…)" hint="Where the ad clicks through.">
             <input className={inputCls} value={form.link} onChange={(e) => set("link", e.target.value)} placeholder="https://…" />
           </Field>
-          <Field label="Image URL" hint="The ad banner / product image.">
-            <input className={inputCls} value={form.image_url} onChange={(e) => set("image_url", e.target.value)} placeholder="https://…/banner.jpg" />
+          <Field label="Image" hint="Apne computer se upload karo (max 6 MB) ya URL paste karo.">
+            <div className="flex items-center gap-2.5">
+              <label className={`cursor-pointer whitespace-nowrap rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-ink transition hover:bg-white ${uploading ? "opacity-60" : ""}`}>
+                {uploading ? "Uploading…" : "⬆ Upload image"}
+                <input type="file" accept="image/*" className="hidden" disabled={uploading} onChange={onFile} />
+              </label>
+              {form.image_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={form.image_url} alt="" className="h-9 w-12 flex-none rounded border border-line object-cover" />
+              )}
+            </div>
+            <input className={`${inputCls} mt-2`} value={form.image_url} onChange={(e) => set("image_url", e.target.value)} placeholder="…or paste an image URL" />
           </Field>
           <Field label="Category (optional)" hint="ai, mobile, apps, gadgets, internet, tech">
             <input className={inputCls} value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="mobile" />

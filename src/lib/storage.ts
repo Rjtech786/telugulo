@@ -24,3 +24,25 @@ export async function uploadArticleImage(
   const { data } = supabase.storage.from(ARTICLE_BUCKET).getPublicUrl(path);
   return data.publicUrl;
 }
+
+/** Upload an owner-provided ad image to Storage; returns its public URL. */
+export async function storeAdImage(
+  bytes: Buffer,
+  contentType: string,
+): Promise<string> {
+  const supabase = createAdminClient();
+  const ext = contentType.includes("png")
+    ? "png"
+    : contentType.includes("webp")
+      ? "webp"
+      : "jpg";
+  const path = `ads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from(ARTICLE_BUCKET)
+    .upload(path, bytes, { contentType, upsert: true });
+  if (error) throw error;
+
+  const { data } = supabase.storage.from(ARTICLE_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}

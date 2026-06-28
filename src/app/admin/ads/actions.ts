@@ -9,6 +9,25 @@ import {
   composeAdCopy,
   type AdCopy,
 } from "@/lib/ads";
+import { storeAdImage } from "@/lib/storage";
+
+/** Upload an ad image file → returns its public Storage URL. */
+export async function uploadAdImage(formData: FormData): Promise<{ url: string }> {
+  await requireAdmin();
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("No file selected");
+  }
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Please choose an image file");
+  }
+  if (file.size > 6 * 1024 * 1024) {
+    throw new Error("Image too large (max 6 MB)");
+  }
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const url = await storeAdImage(bytes, file.type);
+  return { url };
+}
 
 function parseKeywords(raw: string): string[] {
   return raw
