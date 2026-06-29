@@ -34,7 +34,7 @@ export default async function AnalyticsPage() {
         <Link href="/admin/integrations" className="font-medium text-accent underline">
           Integrations
         </Link>
-        , then submit <code>/sitemap.xml</code> in Search Console.
+        , then submit <code>/sitemap_index.xml</code> in Search Console.
       </div>
 
       <section className="space-y-2">

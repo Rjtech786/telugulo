@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { generateNow, publish, unpublish, remove } from "./actions";
 import type { PipelineResult } from "@/lib/agent/pipeline";
+import { formatAdmin } from "@/lib/site";
 
 type Row = {
   id: string;
@@ -155,6 +156,10 @@ function ArticleCard({
         <div className="truncate font-medium">{a.title}</div>
         <div className="truncate text-xs text-neutral-500">
           {a.category} · {a.views} views · /{a.slug}
+        </div>
+        <div className="mt-0.5 text-xs tabular-nums text-neutral-400">
+          {a.status === "published" ? "Published" : "Created"}:{" "}
+          {formatAdmin(a.published_at ?? a.created_at)}
         </div>
       </div>
       <div className="flex flex-none items-center gap-2 text-sm">

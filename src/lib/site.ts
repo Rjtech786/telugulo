@@ -70,6 +70,15 @@ export function formatDate(iso: string | null): string {
   });
 }
 
+/** Admin/sitemap timestamp: "2026-02-23 14:13 +00:00" (UTC). */
+export function formatAdmin(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())} +00:00`;
+}
+
 /** Date + time in IST — shown on article pages (publish time helps news SEO). */
 export function formatDateTime(iso: string | null): string {
   if (!iso) return "";

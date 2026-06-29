@@ -1,15 +1,8 @@
 import { listPublished } from "@/lib/public";
 import { SITE } from "@/lib/site";
+import { SITEMAP_PI, escXml as esc } from "@/lib/sitemap";
 
 export const revalidate = 300;
-
-function esc(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 /** Web Stories sitemap — every article's AMP story (with its image). */
 export async function GET() {
@@ -27,7 +20,7 @@ export async function GET() {
     })
     .join("\n");
 
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+  const xml = `${SITEMAP_PI}
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
 ${items}
