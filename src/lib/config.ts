@@ -207,4 +207,5 @@ export const SETTINGS_KEYS = {
   cost: "cost",
   integrations: "integrations",
   site: "site",
+  agentInstructions: "agent_instructions",
 } as const;

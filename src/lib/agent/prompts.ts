@@ -69,14 +69,24 @@ IMPORTANT: only suggest a local (AP/Telangana/India) angle if there is a GENUINE
 Answer in 3-4 sentences (you may mix Telugu + English).`;
 }
 
+/** Optional learned skill-notes block appended to writing prompts. */
+function skillNotesBlock(notes?: string[]): string {
+  if (!notes || notes.length === 0) return "";
+  return `\n\nLEARNED NOTES (apply these — from past editor feedback):\n${notes
+    .map((n) => `- ${n}`)
+    .join("\n")}`;
+}
+
 export function writingPrompt(opts: {
   title: string;
   research: string;
   angle: string;
   lengthWords: number;
   tone: string;
+  rules?: string; // DB-driven instructions (falls back to WRITING_RULES)
+  skillNotes?: string[];
 }): string {
-  return `${WRITING_RULES}
+  return `${opts.rules ?? WRITING_RULES}${skillNotesBlock(opts.skillNotes)}
 
 Now write a complete news article for telugulo.in.
 
@@ -104,10 +114,10 @@ BODY:
 <the full article in hybrid Telugu, short paragraphs separated by blank lines, with 2-3 ## subheadings>`;
 }
 
-export function selfCheckPrompt(body: string): string {
-  return `${WRITING_RULES}
+export function selfCheckPrompt(body: string, rules?: string): string {
+  return `${rules ?? WRITING_RULES}
 
-You are a STRICT editor. Review this draft against ALL 8 rules above and fix every violation:
+You are a STRICT editor. Review this draft against ALL the rules above and fix every violation:
 - Cut any generic feel-good ending; replace with a concrete fact/number/observation (rule 1).
 - Break up any buzzword list (rule 2).
 - Remove any fabricated local angle or any fact not clearly supported (rules 3 & 4).
@@ -124,6 +134,22 @@ Draft:
 ${body}
 
 Respond with ONLY the improved article text (keep its markdown) — no preamble, no JSON.`;
+}
+
+/** Revise an existing article body per an owner instruction (keeps the rules). */
+export function revisePrompt(body: string, instruction: string, rules?: string): string {
+  return `${rules ?? WRITING_RULES}
+
+You are editing an EXISTING telugulo.in article. Apply this instruction from the owner:
+"${instruction}"
+
+Keep everything that already works. Follow all the rules above. Keep the hybrid
+Telugu style and the markdown structure (## subheadings, **bold**, short paragraphs).
+
+Current article:
+${body}
+
+Respond with ONLY the revised full article body (markdown) — no preamble, no JSON.`;
 }
 
 // ─── Ads: AI ad-copy composer (image + link + keywords → polished ad) ───

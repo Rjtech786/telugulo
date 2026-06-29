@@ -17,6 +17,7 @@ import {
   type Integrations,
   type SiteSettings,
 } from "@/lib/config";
+import { WRITING_RULES } from "@/lib/agent/prompts";
 
 /**
  * Dashboard settings storage (the `settings` table, key/jsonb). SERVER ONLY.
@@ -43,6 +44,25 @@ export async function writeSetting(key: string, value: unknown): Promise<void> {
     .from("settings")
     .upsert({ key, value }, { onConflict: "key" });
   if (error) throw error;
+}
+
+/**
+ * Agent writing instructions — DB-driven so the MCP server (and future UI) can
+ * change how every article is written. Falls back to the built-in WRITING_RULES.
+ */
+export async function getAgentInstructions(): Promise<string> {
+  const saved = await readSetting<string>(SETTINGS_KEYS.agentInstructions);
+  return saved && saved.trim() ? saved : WRITING_RULES;
+}
+
+export async function setAgentInstructions(text: string): Promise<void> {
+  await writeSetting(SETTINGS_KEYS.agentInstructions, text.trim());
+}
+
+/** Whether custom instructions are set (vs the built-in default). */
+export async function hasCustomAgentInstructions(): Promise<boolean> {
+  const saved = await readSetting<string>(SETTINGS_KEYS.agentInstructions);
+  return Boolean(saved && saved.trim());
 }
 
 /** Per-step model map, filled with spec defaults for any missing step. */

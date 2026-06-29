@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getFeatures, getGeneral } from "@/lib/settings";
+import { getFeatures, getGeneral, getAgentInstructions } from "@/lib/settings";
+import { getSkillNoteTexts } from "./skills";
 import { runStep, runImage } from "@/lib/ai";
 import { uploadArticleImage } from "@/lib/storage";
 import { discoverCandidates, fetchArticleText } from "./sources";
@@ -11,6 +12,7 @@ import {
   anglePrompt,
   writingPrompt,
   selfCheckPrompt,
+  revisePrompt,
   imagePrompt,
 } from "./prompts";
 import { notifyDraft } from "./telegram";
@@ -105,6 +107,8 @@ export async function runPipeline(): Promise<PipelineResult> {
     }
     const general = await getGeneral();
     const count = general.articles_per_day;
+    const rules = await getAgentInstructions();
+    const skillNotes = await getSkillNoteTexts();
 
     // STEP 1 — DISCOVERY
     const candidates = await discoverCandidates();
@@ -173,6 +177,8 @@ export async function runPipeline(): Promise<PipelineResult> {
           angle: angle.text,
           lengthWords: general.article_length,
           tone: general.tone,
+          rules,
+          skillNotes,
         }),
         maxTokens: 4000,
         temperature: 0.8,
@@ -188,7 +194,7 @@ export async function runPipeline(): Promise<PipelineResult> {
       try {
         const checked = await runStep("self_check", {
           system: SYSTEM_EDITOR,
-          prompt: selfCheckPrompt(article.body),
+          prompt: selfCheckPrompt(article.body, rules),
           maxTokens: 4000,
           temperature: 0.4,
         });
@@ -261,4 +267,151 @@ export async function runPipeline(): Promise<PipelineResult> {
     log.push(`ERROR: ${e instanceof Error ? e.message : "unknown"}`);
     return { status: "error", drafts, log, reason: e instanceof Error ? e.message : "unknown" };
   }
+}
+
+const VALID_CATEGORIES = ["ai", "mobile", "apps", "gadgets", "internet", "tech"];
+
+export type OnDemandOptions = {
+  category?: string;
+  lengthWords?: number;
+  forceLocalAngle?: boolean;
+};
+
+/**
+ * On-demand generation for a specific owner-given topic (MCP / "write an
+ * article on X"). Skips discovery/selection; always saves a DRAFT for review.
+ * No external source, so it relies on the model's knowledge — owner reviews.
+ */
+export async function generateArticleForTopic(
+  topic: string,
+  options: OnDemandOptions = {},
+): Promise<{ id: string; title: string; slug: string }> {
+  const supabase = createAdminClient();
+  const general = await getGeneral();
+  const features = await getFeatures();
+  const rules = await getAgentInstructions();
+  const skillNotes = await getSkillNoteTexts();
+  const authorId = await getDefaultAuthorId();
+
+  const lengthWords = Math.min(1500, Math.max(400, options.lengthWords || general.article_length));
+  const researchText = [
+    `Owner-requested topic (no external source provided): "${topic}".`,
+    "Use your accurate general knowledge; do NOT invent specific stats, dates or quotes you are unsure of. The owner will review this draft.",
+    options.forceLocalAngle
+      ? "Include a GENUINE Telugu / Andhra Pradesh / Telangana / India angle relevant to this topic."
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const angle = await runStep("angle", {
+    system: SYSTEM_EDITOR,
+    prompt: anglePrompt(topic, researchText),
+    maxTokens: 400,
+    temperature: 0.7,
+  });
+
+  const written = await runStep("writing", {
+    system: SYSTEM_EDITOR,
+    prompt: writingPrompt({
+      title: topic,
+      research: researchText,
+      angle: angle.text,
+      lengthWords,
+      tone: general.tone,
+      rules,
+      skillNotes,
+    }),
+    maxTokens: 4000,
+    temperature: 0.8,
+  });
+  const article = parseArticleFields(written.text);
+  if (!article.headline || !article.body) {
+    throw new Error("Writing step returned an unparseable article");
+  }
+
+  let finalBody = article.body;
+  try {
+    const checked = await runStep("self_check", {
+      system: SYSTEM_EDITOR,
+      prompt: selfCheckPrompt(article.body, rules),
+      maxTokens: 4000,
+      temperature: 0.4,
+    });
+    const cleaned = stripFences(checked.text);
+    if (cleaned.length > article.body.length * 0.5) finalBody = cleaned;
+  } catch {
+    // keep original
+  }
+
+  const category =
+    options.category && VALID_CATEGORIES.includes(options.category.toLowerCase())
+      ? options.category.toLowerCase()
+      : (article.category || "tech").toLowerCase();
+
+  const slug = await ensureUniqueSlug(sanitizeSlug(article.slug || article.headline));
+
+  let imageUrl: string | null = null;
+  if (features.image_generation) {
+    try {
+      const img = await runImage(imagePrompt(article.headline, category));
+      imageUrl = await uploadArticleImage(img.bytes, img.contentType, slug);
+    } catch {
+      // image is optional
+    }
+  }
+
+  const { data: draft, error } = await supabase
+    .from("articles")
+    .insert({
+      slug,
+      title: article.headline,
+      title_meta: article.title_meta,
+      meta_description: article.meta_description,
+      summary: article.summary,
+      body: finalBody,
+      category,
+      image_url: imageUrl,
+      author_id: authorId,
+      source_urls: [{ title: `On-demand: ${topic}`, source: "owner" }],
+      status: "draft",
+      published_at: null,
+    })
+    .select("id, title, slug")
+    .single();
+  if (error) throw error;
+  return { id: draft.id, title: draft.title, slug: draft.slug };
+}
+
+/** Revise an existing draft/article body per an owner instruction (AI edit). */
+export async function reviseDraft(
+  id: string,
+  instruction: string,
+): Promise<{ id: string; title: string; slug: string }> {
+  const supabase = createAdminClient();
+  const { data: row, error: readErr } = await supabase
+    .from("articles")
+    .select("id, title, slug, body")
+    .eq("id", id)
+    .maybeSingle();
+  if (readErr) throw readErr;
+  if (!row) throw new Error(`Article ${id} not found`);
+
+  const rules = await getAgentInstructions();
+  const revised = await runStep("writing", {
+    system: SYSTEM_EDITOR,
+    prompt: revisePrompt(row.body || "", instruction, rules),
+    maxTokens: 4000,
+    temperature: 0.6,
+  });
+  const newBody = stripFences(revised.text);
+  if (newBody.length < 50) throw new Error("Revision produced too little text");
+
+  const { error: updErr } = await supabase
+    .from("articles")
+    .update({ body: newBody })
+    .eq("id", id);
+  if (updErr) throw updErr;
+
+  return { id: row.id, title: row.title, slug: row.slug };
 }
