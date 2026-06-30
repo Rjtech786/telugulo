@@ -172,13 +172,6 @@ export default async function ArticlePage({
         <ArticleBody body={a.body || ""} />
       </div>
 
-      <div className="my-7 border-l-[3px] border-line py-2 pl-4 text-[13px] italic text-ink-mute">
-        ℹ️ ఈ article AI సహాయంతో తయారు చేసి, మానవ సమీక్ష తర్వాత ప్రచురించబడింది. ·{" "}
-        <Link href="/editorial-policy" className="underline">
-          Editorial policy
-        </Link>
-      </div>
-
       <AdSlot
         target={{
           category: a.category,
