@@ -112,14 +112,7 @@ export default async function ArticlePage({
       />
       <ViewPing id={a.id} />
 
-      <Link
-        href="/"
-        className="mt-6 mb-5 inline-flex items-center gap-1.5 text-[13px] text-accent"
-      >
-        ← వెనక్కి
-      </Link>
-
-      <div>
+      <div className="mt-6">
         {a.category ? (
           <Link href={`/category/${a.category}`}>
             <CategoryBadge slug={a.category} />
