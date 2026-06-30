@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getPublishedBySlug, getAuthor, listPublished } from "@/lib/public";
+import { getPublishedBySlug, getAuthor, listPublished, listRelated } from "@/lib/public";
 import { ArticleBody } from "@/components/article-body";
 import { ViewPing } from "@/components/view-ping";
 import { AdSlot } from "@/components/ad-slot";
 import { Thumb } from "@/components/thumb";
-import { CategoryBadge } from "@/components/article-card";
+import { CategoryBadge, ArticleCard } from "@/components/article-card";
 import { SITE, formatDate, formatDateTime } from "@/lib/site";
 
 export const revalidate = 300;
@@ -60,6 +60,7 @@ export default async function ArticlePage({
   if (!a) notFound();
 
   const author = a.author_id ? await getAuthor(a.author_id) : null;
+  const related = await listRelated(a.category, a.id, 6);
   const url = `${SITE.url}/${a.slug}/`;
 
   const breadcrumb = [
@@ -186,6 +187,20 @@ export default async function ArticlePage({
           <div className="font-semibold text-ink">{author.name}</div>
           <p className="mt-1 text-ink-soft">{author.bio}</p>
         </div>
+      )}
+
+      {related.length > 0 && (
+        <section className="mt-12">
+          <h2 className="mb-4 flex items-center gap-2 border-b-2 border-line pb-2 text-[18px] font-extrabold text-ink">
+            <span className="h-5 w-[5px] rounded-full bg-accent" />
+            సంబంధిత వార్తలు
+          </h2>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            {related.map((r) => (
+              <ArticleCard key={r.id} a={r} />
+            ))}
+          </div>
+        </section>
       )}
     </article>
   );

@@ -75,6 +75,42 @@ export async function listByCategory(category: string, limit = 30) {
   return (data as PublicArticle[]) ?? [];
 }
 
+/**
+ * Related articles for the bottom of an article page: same category first,
+ * then topped up with the most recent published articles (current one excluded).
+ */
+export async function listRelated(
+  category: string | null,
+  excludeId: string,
+  limit = 6,
+): Promise<PublicArticle[]> {
+  const pool: PublicArticle[] = [];
+  const seen = new Set<string>([excludeId]);
+
+  if (category) {
+    const sameCat = await listByCategory(category, limit + 4);
+    for (const a of sameCat) {
+      if (!seen.has(a.id)) {
+        seen.add(a.id);
+        pool.push(a);
+      }
+    }
+  }
+
+  if (pool.length < limit) {
+    const recent = await listPublished(limit + 12);
+    for (const a of recent) {
+      if (pool.length >= limit) break;
+      if (!seen.has(a.id)) {
+        seen.add(a.id);
+        pool.push(a);
+      }
+    }
+  }
+
+  return pool.slice(0, limit);
+}
+
 export async function getPublishedBySlug(
   slug: string,
 ): Promise<PublicArticle | null> {
