@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { generateNow, publish, unpublish, remove } from "./actions";
-import type { PipelineResult } from "@/lib/agent/pipeline";
+import { publish, unpublish, remove } from "./actions";
 import { formatAdmin } from "@/lib/site";
 
 type Row = {
@@ -23,60 +22,22 @@ type Row = {
 export function ArticlesClient({ articles }: { articles: Row[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [result, setResult] = useState<PipelineResult | null>(null);
 
   const drafts = articles.filter((a) => a.status === "draft");
   const published = articles.filter((a) => a.status === "published");
 
-  function handleGenerate() {
-    setResult(null);
-    start(async () => {
-      const r = await generateNow();
-      setResult(r);
-      router.refresh();
-    });
-  }
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Articles</h1>
-          <p className="text-sm text-neutral-500">
-            Drafts are AI-written and human-reviewed. Nothing publishes
-            automatically.
-          </p>
-        </div>
-        <button
-          onClick={handleGenerate}
-          disabled={pending}
-          className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-        >
-          {pending ? "Generating… (1–2 min)" : "⚡ Generate now"}
-        </button>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Articles</h1>
+        <p className="text-sm text-neutral-500">
+          AI-written, human-reviewed drafts. New article banane ke liye{" "}
+          <Link href="/admin/agent" className="font-medium text-accent underline">
+            AI Agent
+          </Link>{" "}
+          pe jao.
+        </p>
       </div>
-
-      {result && (
-        <div
-          className={
-            "rounded-xl border px-4 py-3 text-sm " +
-            (result.status === "error"
-              ? "border-red-300 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400"
-              : "border-neutral-200 bg-neutral-50 text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300")
-          }
-        >
-          <div className="font-medium">
-            {result.status === "created" && `✓ Created ${result.drafts.length} draft(s)`}
-            {result.status === "skipped" && `Skipped: ${result.reason}`}
-            {result.status === "error" && `Error: ${result.reason}`}
-          </div>
-          {result.log.length > 0 && (
-            <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-neutral-500">
-              {result.log.join("\n")}
-            </pre>
-          )}
-        </div>
-      )}
 
       <Section title={`Drafts (${drafts.length})`}>
         {drafts.length === 0 ? (

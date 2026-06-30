@@ -185,6 +185,14 @@ export function IconYoutube(p: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function IconBolt(p: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...p}>
+      <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
+    </Svg>
+  );
+}
+
 export function IconGlobe(p: SVGProps<SVGSVGElement>) {
   return (
     <Svg {...p}>

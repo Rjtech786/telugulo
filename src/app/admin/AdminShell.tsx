@@ -13,6 +13,7 @@ import {
   IconChart,
   IconMegaphone,
   IconGlobe,
+  IconBolt,
   IconLogout,
   IconMenu,
   IconClose,
@@ -27,6 +28,7 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { href: "/admin", label: "Overview", icon: IconDashboard, exact: true },
+  { href: "/admin/agent", label: "AI Agent", icon: IconBolt },
   { href: "/admin/articles", label: "Articles", icon: IconArticles },
   { href: "/admin/analytics", label: "Analytics", icon: IconChart },
   { href: "/admin/site", label: "Site Settings", icon: IconGlobe },
