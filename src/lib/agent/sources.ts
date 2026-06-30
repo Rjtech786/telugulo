@@ -90,3 +90,85 @@ export async function fetchArticleText(
     .replace(/\s+/g, " ");
   return decodeEntities(text).trim().slice(0, maxChars);
 }
+
+// ─── Multi-source research (Google News search → real sources) ───
+
+export type SearchHit = Candidate & { snippet: string };
+
+/** Parse Google News RSS search results (title - publisher, link, snippet). */
+function parseGoogleNews(xml: string, limit: number): SearchHit[] {
+  const hits: SearchHit[] = [];
+  const blocks = xml.split(/<item[\s>]/i).slice(1);
+  for (const block of blocks) {
+    const titleRaw = block.match(/<title[^>]*>([\s\S]*?)<\/title>/)?.[1] ?? "";
+    const link = block.match(/<link[^>]*>([\s\S]*?)<\/link>/)?.[1] ?? "";
+    const srcRaw = block.match(/<source[^>]*>([\s\S]*?)<\/source>/)?.[1] ?? "";
+    const descRaw = block.match(/<description[^>]*>([\s\S]*?)<\/description>/)?.[1] ?? "";
+    const title0 = decodeEntities(titleRaw).trim();
+    const source =
+      decodeEntities(srcRaw).trim() ||
+      (title0.includes(" - ") ? title0.split(" - ").slice(-1)[0].trim() : "news");
+    const title =
+      source && title0.endsWith(`- ${source}`)
+        ? title0.slice(0, -(source.length + 2)).trim()
+        : title0;
+    const snippet = decodeEntities(descRaw)
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (title && link) hits.push({ title, link: decodeEntities(link).trim(), source, snippet });
+    if (hits.length >= limit) break;
+  }
+  return hits;
+}
+
+/** Search real news sources for any topic (free, no API key — Google News RSS). */
+export async function searchSources(query: string, limit = 8): Promise<SearchHit[]> {
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(
+    query,
+  )}&hl=en-IN&gl=IN&ceid=IN:en`;
+  const xml = await fetchText(url);
+  return xml ? parseGoogleNews(xml, limit) : [];
+}
+
+export type ResearchResult = { text: string; sources: Candidate[] };
+
+/**
+ * Read multiple real sources for a topic and return combined research text +
+ * the sources used. Prefers full article text; falls back to the news snippet
+ * when a source can't be fetched, so there's always real grounding.
+ */
+export async function gatherResearch(
+  query: string,
+  opts: { minSources?: number; depth?: "basic" | "deep"; seed?: Candidate } = {},
+): Promise<ResearchResult> {
+  const minSources = Math.min(8, Math.max(1, opts.minSources ?? 4));
+  const perChars = opts.depth === "basic" ? 2500 : 5000;
+
+  const hits = await searchSources(query, minSources + 5);
+  const queue: SearchHit[] = [];
+  if (opts.seed) queue.push({ ...opts.seed, snippet: "" });
+  for (const h of hits) {
+    if (!queue.some((q) => q.link === h.link)) queue.push(h);
+  }
+
+  const fetched = await Promise.all(
+    queue.slice(0, minSources + 5).map(async (q) => ({
+      q,
+      text: await fetchArticleText(q.link, perChars),
+    })),
+  );
+
+  const used: Candidate[] = [];
+  const parts: string[] = [];
+  for (const { q, text } of fetched) {
+    const content = text && text.length > 400 ? text : q.snippet;
+    if (content && content.length > 60) {
+      used.push({ title: q.title, link: q.link, source: q.source });
+      parts.push(`SOURCE — ${q.source}: ${q.title}\n${content}`);
+    }
+    if (used.length >= minSources) break;
+  }
+
+  return { text: parts.join("\n\n---\n\n"), sources: used };
+}

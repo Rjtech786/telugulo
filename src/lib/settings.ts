@@ -6,6 +6,8 @@ import {
   DEFAULT_GENERAL,
   DEFAULT_COST,
   DEFAULT_SITE_SETTINGS,
+  DEFAULT_RESEARCH,
+  DEFAULT_QUALITY,
   SOCIAL_KEYS,
   SETTINGS_KEYS,
   type StepKey,
@@ -16,6 +18,8 @@ import {
   type CostSettings,
   type Integrations,
   type SiteSettings,
+  type ResearchSettings,
+  type QualityRules,
 } from "@/lib/config";
 import { WRITING_RULES } from "@/lib/agent/prompts";
 
@@ -63,6 +67,60 @@ export async function setAgentInstructions(text: string): Promise<void> {
 export async function hasCustomAgentInstructions(): Promise<boolean> {
   const saved = await readSetting<string>(SETTINGS_KEYS.agentInstructions);
   return Boolean(saved && saved.trim());
+}
+
+/** Research settings — how many sources the agent reads + depth. */
+export async function getResearchSettings(): Promise<ResearchSettings> {
+  const saved = (await readSetting<Partial<ResearchSettings>>(SETTINGS_KEYS.research)) ?? {};
+  return {
+    min_sources: Math.min(8, Math.max(1, Number(saved.min_sources) || DEFAULT_RESEARCH.min_sources)),
+    depth: saved.depth === "basic" ? "basic" : DEFAULT_RESEARCH.depth,
+  };
+}
+
+export async function setResearchSettings(input: Partial<ResearchSettings>): Promise<ResearchSettings> {
+  const current = await getResearchSettings();
+  const next: ResearchSettings = {
+    min_sources:
+      input.min_sources != null
+        ? Math.min(8, Math.max(1, Number(input.min_sources)))
+        : current.min_sources,
+    depth: input.depth === "basic" || input.depth === "deep" ? input.depth : current.depth,
+  };
+  await writeSetting(SETTINGS_KEYS.research, next);
+  return next;
+}
+
+/** Quality rules — enforced in the writing + self-check steps. */
+export async function getQualityRules(): Promise<QualityRules> {
+  const saved = (await readSetting<Partial<QualityRules>>(SETTINGS_KEYS.quality)) ?? {};
+  return { ...DEFAULT_QUALITY, ...saved };
+}
+
+export async function setQualityRules(input: Partial<QualityRules>): Promise<QualityRules> {
+  const current = await getQualityRules();
+  const next: QualityRules = {
+    min_words: clampWords(input.min_words, current.min_words),
+    max_words: clampWords(input.max_words, current.max_words),
+    facts_only: bool(input.facts_only, current.facts_only),
+    require_local_angle: bool(input.require_local_angle, current.require_local_angle),
+    ban_ai_slop: bool(input.ban_ai_slop, current.ban_ai_slop),
+    self_check: bool(input.self_check, current.self_check),
+  };
+  if (next.max_words < next.min_words) next.max_words = next.min_words + 100;
+  await writeSetting(SETTINGS_KEYS.quality, next);
+  return next;
+}
+
+function clampWords(v: unknown, fallback: number): number {
+  if (v == null) return fallback;
+  return Math.min(2000, Math.max(300, Number(v) || fallback));
+}
+function bool(v: unknown, fallback: boolean): boolean {
+  if (typeof v === "boolean") return v;
+  if (v === "true") return true;
+  if (v === "false") return false;
+  return fallback;
 }
 
 /** Per-step model map, filled with spec defaults for any missing step. */

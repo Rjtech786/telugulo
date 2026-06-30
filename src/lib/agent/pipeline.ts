@@ -1,10 +1,16 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getFeatures, getGeneral, getAgentInstructions } from "@/lib/settings";
+import {
+  getFeatures,
+  getGeneral,
+  getAgentInstructions,
+  getResearchSettings,
+  getQualityRules,
+} from "@/lib/settings";
 import { getSkillNoteTexts } from "./skills";
 import { runStep, runImage } from "@/lib/ai";
 import { uploadArticleImage } from "@/lib/storage";
-import { discoverCandidates, fetchArticleText } from "./sources";
+import { discoverCandidates, fetchArticleText, gatherResearch } from "./sources";
 import { sanitizeSlug, ensureUniqueSlug } from "./slug";
 import {
   SYSTEM_EDITOR,
@@ -109,6 +115,9 @@ export async function runPipeline(): Promise<PipelineResult> {
     const count = general.articles_per_day;
     const rules = await getAgentInstructions();
     const skillNotes = await getSkillNoteTexts();
+    const researchSettings = await getResearchSettings();
+    const qualityRules = await getQualityRules();
+    const lengthWords = Math.round((qualityRules.min_words + qualityRules.max_words) / 2);
 
     // STEP 1 — DISCOVERY
     const candidates = await discoverCandidates();
@@ -154,10 +163,27 @@ export async function runPipeline(): Promise<PipelineResult> {
       if (!cand) continue;
       log.push(`→ "${cand.title}" (${cand.source})`);
 
-      // STEP 3 — RESEARCH
-      const research = await fetchArticleText(cand.link);
-      log.push(`  Research: ${research.length} chars extracted`);
-      const researchText = research || cand.title;
+      // STEP 3 — RESEARCH (primary source + corroborating sources)
+      const primary = await fetchArticleText(
+        cand.link,
+        researchSettings.depth === "basic" ? 2500 : 6000,
+      );
+      const extra = await gatherResearch(cand.title, {
+        minSources: researchSettings.min_sources,
+        depth: researchSettings.depth,
+        seed: cand,
+      });
+      const researchText =
+        [
+          primary ? `SOURCE — ${cand.source}: ${cand.title}\n${primary}` : "",
+          extra.text,
+        ]
+          .filter(Boolean)
+          .join("\n\n---\n\n") || cand.title;
+      const sources = extra.sources.length
+        ? extra.sources
+        : [{ title: cand.title, link: cand.link, source: cand.source }];
+      log.push(`  Research: ${sources.length} source(s), ${researchText.length} chars`);
 
       // STEP 4 — ANGLE
       const angle = await runStep("angle", {
@@ -175,10 +201,11 @@ export async function runPipeline(): Promise<PipelineResult> {
           title: cand.title,
           research: researchText,
           angle: angle.text,
-          lengthWords: general.article_length,
+          lengthWords,
           tone: general.tone,
           rules,
           skillNotes,
+          quality: qualityRules,
         }),
         maxTokens: 4000,
         temperature: 0.8,
@@ -189,25 +216,27 @@ export async function runPipeline(): Promise<PipelineResult> {
       }
       log.push(`  Write: "${article.headline}"`);
 
-      // STEP 7 (early) — SELF-CRITIQUE on the body
+      // STEP 7 (early) — SELF-CRITIQUE on the body (if enabled)
       let finalBody = article.body;
-      try {
-        const checked = await runStep("self_check", {
-          system: SYSTEM_EDITOR,
-          prompt: selfCheckPrompt(article.body, rules),
-          maxTokens: 4000,
-          temperature: 0.4,
-        });
-        const cleaned = stripFences(checked.text);
-        // Guard against a model that returns junk/too-short output.
-        if (cleaned.length > article.body.length * 0.5) {
-          finalBody = cleaned;
-          log.push("  Self-critique: cleaned");
-        } else {
-          log.push("  Self-critique: kept original (output too short)");
+      if (qualityRules.self_check) {
+        try {
+          const checked = await runStep("self_check", {
+            system: SYSTEM_EDITOR,
+            prompt: selfCheckPrompt(article.body, rules, qualityRules),
+            maxTokens: 4000,
+            temperature: 0.4,
+          });
+          const cleaned = stripFences(checked.text);
+          // Guard against a model that returns junk/too-short output.
+          if (cleaned.length > article.body.length * 0.5) {
+            finalBody = cleaned;
+            log.push("  Self-critique: cleaned");
+          } else {
+            log.push("  Self-critique: kept original (output too short)");
+          }
+        } catch {
+          log.push("  Self-critique: skipped (kept original)");
         }
-      } catch {
-        log.push("  Self-critique: skipped (kept original)");
       }
 
       // Slug
@@ -240,7 +269,7 @@ export async function runPipeline(): Promise<PipelineResult> {
           category: (article.category || "tech").toLowerCase(),
           image_url: imageUrl,
           author_id: authorId,
-          source_urls: [{ title: cand.title, url: cand.link, source: cand.source }],
+          source_urls: sources.map((s) => ({ title: s.title, url: s.link, source: s.source })),
           status: publishNow ? "published" : "draft",
           published_at: publishNow ? new Date().toISOString() : null,
         })
@@ -279,8 +308,8 @@ export type OnDemandOptions = {
 
 /**
  * On-demand generation for a specific owner-given topic (MCP / "write an
- * article on X"). Skips discovery/selection; always saves a DRAFT for review.
- * No external source, so it relies on the model's knowledge — owner reviews.
+ * article on X"). Skips discovery/selection; researches the topic from real
+ * news sources first, then writes. Always saves a DRAFT for review.
  */
 export async function generateArticleForTopic(
   topic: string,
@@ -291,18 +320,27 @@ export async function generateArticleForTopic(
   const features = await getFeatures();
   const rules = await getAgentInstructions();
   const skillNotes = await getSkillNoteTexts();
+  const researchSettings = await getResearchSettings();
+  const quality = await getQualityRules();
   const authorId = await getDefaultAuthorId();
 
-  const lengthWords = Math.min(1500, Math.max(400, options.lengthWords || general.article_length));
-  const researchText = [
-    `Owner-requested topic (no external source provided): "${topic}".`,
-    "Use your accurate general knowledge; do NOT invent specific stats, dates or quotes you are unsure of. The owner will review this draft.",
-    options.forceLocalAngle
-      ? "Include a GENUINE Telugu / Andhra Pradesh / Telangana / India angle relevant to this topic."
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const lengthWords =
+    options.lengthWords != null
+      ? Math.min(1500, Math.max(400, options.lengthWords))
+      : Math.round((quality.min_words + quality.max_words) / 2);
+
+  // STEP — RESEARCH the topic across real sources first.
+  const research = await gatherResearch(topic, {
+    minSources: researchSettings.min_sources,
+    depth: researchSettings.depth,
+  });
+  const hasResearch = research.text.length > 200;
+  const researchText = hasResearch
+    ? research.text +
+      (options.forceLocalAngle
+        ? "\n\n(Add a GENUINE Telugu / AP / Telangana / India angle if the facts support one.)"
+        : "")
+    : `No reliable sources found for "${topic}". Use accurate general knowledge ONLY; do NOT invent specific stats, dates or quotes. The owner will review.`;
 
   const angle = await runStep("angle", {
     system: SYSTEM_EDITOR,
@@ -321,6 +359,7 @@ export async function generateArticleForTopic(
       tone: general.tone,
       rules,
       skillNotes,
+      quality,
     }),
     maxTokens: 4000,
     temperature: 0.8,
@@ -331,17 +370,19 @@ export async function generateArticleForTopic(
   }
 
   let finalBody = article.body;
-  try {
-    const checked = await runStep("self_check", {
-      system: SYSTEM_EDITOR,
-      prompt: selfCheckPrompt(article.body, rules),
-      maxTokens: 4000,
-      temperature: 0.4,
-    });
-    const cleaned = stripFences(checked.text);
-    if (cleaned.length > article.body.length * 0.5) finalBody = cleaned;
-  } catch {
-    // keep original
+  if (quality.self_check) {
+    try {
+      const checked = await runStep("self_check", {
+        system: SYSTEM_EDITOR,
+        prompt: selfCheckPrompt(article.body, rules, quality),
+        maxTokens: 4000,
+        temperature: 0.4,
+      });
+      const cleaned = stripFences(checked.text);
+      if (cleaned.length > article.body.length * 0.5) finalBody = cleaned;
+    } catch {
+      // keep original
+    }
   }
 
   const category =
@@ -373,7 +414,9 @@ export async function generateArticleForTopic(
       category,
       image_url: imageUrl,
       author_id: authorId,
-      source_urls: [{ title: `On-demand: ${topic}`, source: "owner" }],
+      source_urls: research.sources.length
+        ? research.sources.map((s) => ({ title: s.title, url: s.link, source: s.source }))
+        : [{ title: `On-demand: ${topic}`, source: "owner" }],
       status: "draft",
       published_at: null,
     })

@@ -1,6 +1,14 @@
 import "server-only";
 import { SITE } from "@/lib/site";
-import { SETTINGS_KEYS, type GeneralSettings } from "@/lib/config";
+import {
+  SETTINGS_KEYS,
+  PIPELINE_STEPS,
+  TEXT_PROVIDERS,
+  TEXT_MODELS,
+  type GeneralSettings,
+  type StepKey,
+  type TextProvider,
+} from "@/lib/config";
 import {
   listArticles,
   getArticle,
@@ -17,6 +25,11 @@ import {
   getAgentInstructions,
   setAgentInstructions,
   hasCustomAgentInstructions,
+  getResearchSettings,
+  setResearchSettings,
+  getQualityRules,
+  setQualityRules,
+  getModelMap,
   writeSetting,
 } from "@/lib/settings";
 import { addSkillNote, listSkillNotes } from "@/lib/agent/skills";
@@ -50,6 +63,16 @@ const num = (description: string): Json => ({ type: "number", description });
 const bool = (description: string): Json => ({ type: "boolean", description });
 
 const adminLink = (id: string) => `${SITE.url}/admin/articles/${id}`;
+
+// MCP "task" names → internal pipeline step keys (for model control).
+const TASK_TO_STEP: Record<string, StepKey> = {
+  discovery: "khoj",
+  selection: "chunaav",
+  research: "research",
+  angle: "angle",
+  writing: "writing",
+  self_check: "self_check",
+};
 
 export const TOOLS: McpTool[] = [
   // ─── Content ───
@@ -271,6 +294,146 @@ export const TOOLS: McpTool[] = [
       await logMcpAction("add_skill_note", { problem_type: a.problem_type }, id);
       const all = await listSkillNotes(20);
       return { text: `Skill note added. The agent now has ${all.length} note(s).`, data: { id } };
+    },
+  },
+
+  // ─── Research / quality / models ───
+  {
+    name: "telugulo_get_research_settings",
+    description: "Show how the agent researches before writing (how many sources it reads + depth).",
+    readOnly: true,
+    inputSchema: obj({}),
+    handler: async () => {
+      const r = await getResearchSettings();
+      return {
+        text: `Sources read per article: ${r.min_sources}\nDepth: ${r.depth}`,
+        data: r,
+      };
+    },
+  },
+  {
+    name: "telugulo_update_research_settings",
+    description:
+      "Update research rules so the agent reads real sources before writing. min_sources e.g. 4-5; depth = basic | deep.",
+    inputSchema: obj({
+      min_sources: num("How many real sources to read (1-8)."),
+      depth: str("basic | deep (how much text per source)."),
+    }),
+    handler: async (a) => {
+      const next = await setResearchSettings({
+        min_sources: a.min_sources != null ? Number(a.min_sources) : undefined,
+        depth: a.depth === "basic" ? "basic" : a.depth === "deep" ? "deep" : undefined,
+      });
+      await logMcpAction("update_research_settings", a, "updated");
+      return { text: `Research: ${next.min_sources} sources, ${next.depth} depth.`, data: next };
+    },
+  },
+  {
+    name: "telugulo_get_quality_rules",
+    description: "Show the current article quality rules (length, facts-only, local-angle, anti-slop, self-check).",
+    readOnly: true,
+    inputSchema: obj({}),
+    handler: async () => {
+      const q = await getQualityRules();
+      return {
+        text: `Length: ${q.min_words}-${q.max_words} words\nFacts-only: ${q.facts_only}\nLocal angle required: ${q.require_local_angle}\nBan AI-slop: ${q.ban_ai_slop}\nSelf-check: ${q.self_check}`,
+        data: q,
+      };
+    },
+  },
+  {
+    name: "telugulo_update_quality_rules",
+    description:
+      "Update article quality rules. Any subset of: min_words, max_words, facts_only, require_local_angle, ban_ai_slop, self_check. IMPORTANT: pass confirm=true to apply.",
+    inputSchema: obj({
+      min_words: num("Minimum words (e.g. 600)."),
+      max_words: num("Maximum words (e.g. 900)."),
+      facts_only: bool("Only facts from sources — no hallucination."),
+      require_local_angle: bool("Require a genuine Telugu/India angle."),
+      ban_ai_slop: bool("Strip generic/robotic AI phrasing."),
+      self_check: bool("Run the self-critique editing pass."),
+      confirm: bool("Must be true to apply."),
+    }),
+    handler: async (a) => {
+      if (!a.confirm) {
+        return {
+          text: "This changes how ALL future articles are written/checked. Re-call with confirm=true to apply.",
+          data: { pending_confirmation: true },
+        };
+      }
+      const next = await setQualityRules({
+        min_words: a.min_words as number | undefined,
+        max_words: a.max_words as number | undefined,
+        facts_only: a.facts_only as boolean | undefined,
+        require_local_angle: a.require_local_angle as boolean | undefined,
+        ban_ai_slop: a.ban_ai_slop as boolean | undefined,
+        self_check: a.self_check as boolean | undefined,
+      });
+      await logMcpAction("update_quality_rules", a, "updated");
+      return { text: "Quality rules updated. Tip: telugulo_test_article to verify.", data: next };
+    },
+  },
+  {
+    name: "telugulo_get_models",
+    description: "Show which AI model is used for each task (discovery, research, writing, self_check).",
+    readOnly: true,
+    inputSchema: obj({}),
+    handler: async () => {
+      const map = await getModelMap();
+      const rows = Object.entries(TASK_TO_STEP).map(([task, step]) => ({
+        task,
+        provider: map[step].provider,
+        model: map[step].model,
+      }));
+      return {
+        text: rows.map((r) => `${r.task}: ${r.provider} / ${r.model}`).join("\n"),
+        data: rows,
+      };
+    },
+  },
+  {
+    name: "telugulo_update_model",
+    description:
+      "Set the AI model for one task. task: discovery|selection|research|angle|writing|self_check. provider: claude|openai|gemini. model: e.g. gpt-4.1, claude-sonnet-4-6, gemini-2.5-pro.",
+    inputSchema: obj(
+      {
+        task: str("Which step."),
+        provider: str("claude | openai | gemini."),
+        model: str("Model id for that provider."),
+      },
+      ["task", "provider", "model"],
+    ),
+    handler: async (a) => {
+      const step = TASK_TO_STEP[String(a.task)];
+      if (!step) throw new Error(`Unknown task. Use one of: ${Object.keys(TASK_TO_STEP).join(", ")}`);
+      const provider = String(a.provider) as TextProvider;
+      if (!TEXT_PROVIDERS.some((p) => p.id === provider)) {
+        throw new Error("provider must be claude | openai | gemini");
+      }
+      const model = String(a.model);
+      if (!TEXT_MODELS[provider].some((m) => m.id === model)) {
+        const ids = TEXT_MODELS[provider].map((m) => m.id).join(", ");
+        throw new Error(`Unknown model for ${provider}. Available: ${ids}`);
+      }
+      const map = await getModelMap();
+      map[step] = { provider, model };
+      const clean = Object.fromEntries(PIPELINE_STEPS.map((s) => [s.key, map[s.key]]));
+      await writeSetting(SETTINGS_KEYS.models, clean);
+      await logMcpAction("update_model", a, "updated");
+      return { text: `Model for "${a.task}" set to ${provider} / ${model}.`, data: { task: a.task, provider, model } };
+    },
+  },
+  {
+    name: "telugulo_list_skill_notes",
+    description: "List the agent's learned skill notes (self-learning memory).",
+    readOnly: true,
+    inputSchema: obj({}),
+    handler: async () => {
+      const notes = await listSkillNotes(50);
+      const text = notes.length
+        ? notes.map((n) => `• ${n.problem_type} → ${n.solution_note}`).join("\n")
+        : "No skill notes yet.";
+      return { text, data: notes };
     },
   },
 

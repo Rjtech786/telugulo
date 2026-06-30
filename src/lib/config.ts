@@ -162,6 +162,34 @@ export const DEFAULT_INTEGRATIONS: Integrations = {
   head_html: "",
 };
 
+// ─── Research settings (how the agent gathers sources before writing) ───
+export type ResearchSettings = {
+  min_sources: number; // how many real sources to read (e.g. 4-5)
+  depth: "basic" | "deep"; // how much text to pull per source
+};
+export const DEFAULT_RESEARCH: ResearchSettings = {
+  min_sources: 4,
+  depth: "deep",
+};
+
+// ─── Quality rules (enforced in writing + self-check) ───
+export type QualityRules = {
+  min_words: number;
+  max_words: number;
+  facts_only: boolean; // only facts from the research — no hallucination
+  require_local_angle: boolean; // a genuine Telugu/India angle is mandatory
+  ban_ai_slop: boolean; // strip generic/robotic AI phrasing
+  self_check: boolean; // run the self-critique editing pass
+};
+export const DEFAULT_QUALITY: QualityRules = {
+  min_words: 600,
+  max_words: 900,
+  facts_only: true,
+  require_local_angle: false,
+  ban_ai_slop: true,
+  self_check: true,
+};
+
 // ─── Public site settings (chrome shown to readers) ───
 export const SOCIAL_KEYS = [
   "facebook",
@@ -208,4 +236,6 @@ export const SETTINGS_KEYS = {
   integrations: "integrations",
   site: "site",
   agentInstructions: "agent_instructions",
+  research: "research_settings",
+  quality: "quality_rules",
 } as const;

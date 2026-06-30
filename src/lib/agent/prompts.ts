@@ -1,4 +1,5 @@
 import type { Candidate } from "./sources";
+import type { QualityRules } from "@/lib/config";
 
 /**
  * Prompt templates for the agent. The article writing rules (owner-defined +
@@ -77,6 +78,21 @@ function skillNotesBlock(notes?: string[]): string {
     .join("\n")}`;
 }
 
+/** DB-driven quality rules rendered as a strict block for the prompts. */
+export function qualityBlock(qr?: QualityRules): string {
+  if (!qr) return "";
+  const lines = [`- LENGTH: ${qr.min_words}-${qr.max_words} words (stay in this range).`];
+  if (qr.facts_only)
+    lines.push(
+      "- FACTS-ONLY (CRITICAL): use ONLY facts present in the SOURCES below. Do NOT invent names, dates, numbers, prices or quotes. If a detail is not in the sources, leave it out. Never guess a date.",
+    );
+  if (qr.require_local_angle)
+    lines.push("- LOCAL ANGLE: include a GENUINE Telugu / AP / Telangana / India angle (only if real).");
+  if (qr.ban_ai_slop)
+    lines.push("- NO AI-SLOP: cut generic feel-good filler and buzzword lists. Write like a real human Telugu journalist.");
+  return `\n\nQUALITY RULES (STRICT — follow exactly):\n${lines.join("\n")}`;
+}
+
 export function writingPrompt(opts: {
   title: string;
   research: string;
@@ -85,8 +101,9 @@ export function writingPrompt(opts: {
   tone: string;
   rules?: string; // DB-driven instructions (falls back to WRITING_RULES)
   skillNotes?: string[];
+  quality?: QualityRules;
 }): string {
-  return `${opts.rules ?? WRITING_RULES}${skillNotesBlock(opts.skillNotes)}
+  return `${opts.rules ?? WRITING_RULES}${qualityBlock(opts.quality)}${skillNotesBlock(opts.skillNotes)}
 
 Now write a complete news article for telugulo.in.
 
@@ -95,7 +112,7 @@ Angle for Telugu readers: ${opts.angle}
 Tone: ${opts.tone}
 Target length: about ${opts.lengthWords} words.
 
-Research — use ONLY the facts here (rule 4). Do NOT copy sentences; write original Telugu. Do NOT add any fact that is not below:
+SOURCES — use ONLY the facts here (no hallucination). Do NOT copy sentences; write original Telugu. Do NOT add any fact that is not below:
 ${opts.research}
 
 Structure: strong hook (no "ఇటీవల/recently" filler) → context → explanation → ONE analytical "why this matters" sentence (rule 5) → concrete ending (rule 1). Short paragraphs, varied sentence length. Break the article with 2-3 short Telugu "## subheadings" so it is scannable, and put the single most important fact in **bold** (once).
@@ -114,10 +131,11 @@ BODY:
 <the full article in hybrid Telugu, short paragraphs separated by blank lines, with 2-3 ## subheadings>`;
 }
 
-export function selfCheckPrompt(body: string, rules?: string): string {
-  return `${rules ?? WRITING_RULES}
+export function selfCheckPrompt(body: string, rules?: string, quality?: QualityRules): string {
+  return `${rules ?? WRITING_RULES}${qualityBlock(quality)}
 
 You are a STRICT editor. Review this draft against ALL the rules above and fix every violation:
+- If FACTS-ONLY is set: remove any name/date/number/quote that looks invented or unsupported.
 - Cut any generic feel-good ending; replace with a concrete fact/number/observation (rule 1).
 - Break up any buzzword list (rule 2).
 - Remove any fabricated local angle or any fact not clearly supported (rules 3 & 4).
