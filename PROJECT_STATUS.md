@@ -4,7 +4,7 @@
 > state. (No secrets here — repo is public. Real secrets live in `.env.local`
 > locally and `.env.production` on the EC2.)
 
-**Last updated:** 2026-06-27 · **Owner:** Roshan (roshanjameer8786@gmail.com)
+**Last updated:** 2026-06-30 · **Owner:** Roshan (roshanjameer8786@gmail.com)
 
 ---
 
@@ -29,9 +29,9 @@ Built with Next.js 16. Replaces the old WordPress site.
 
 ## 4. Supabase (dedicated project — NOT the ApnaBot one)
 - **Project id:** `ofusghtmlbhikrohtskm` · URL `https://ofusghtmlbhikrohtskm.supabase.co` · region ap-south-1
-- **Tables:** `articles`, `authors`, `settings`, `api_keys` (AES-256-GCM encrypted), `ads`, `performance_insights`, `page_views` (timestamped view events for traffic analytics)
-- **Storage bucket:** `article-images` (public)
-- **Migrations:** `supabase/migrations/` (0001 schema, 0002 view-counter, 0003 ad counters, 0004 page_views + `daily_view_counts`/`top_articles_since` RPCs)
+- **Tables:** `articles`, `authors`, `settings`, `api_keys` (AES-256-GCM encrypted), `ads` (+ keywords/headline/description/cta), `performance_insights`, `page_views` (timestamped traffic analytics), `skill_notes` (agent self-learning), `mcp_action_log` (MCP audit)
+- **Storage bucket:** `article-images` (public; ad/featured/body uploads go here too)
+- **Migrations:** `supabase/migrations/` (0001 schema, 0002 view-counter, 0003 ad counters, 0004 page_views + `daily_view_counts`/`top_articles_since` RPCs, 0005 ads AI/keywords, 0006 skill_notes + mcp_action_log)
 - RLS on: only published articles / authors / active ads are public; rest is server-only (service role)
 
 ## 5. Key code structure
@@ -41,40 +41,63 @@ src/
     (site)/            public blog: page (home), [slug], category, author, about/privacy/etc.
                        layout reads getSiteSettings() → header/footer (name, tagline, socials)
     admin/             dashboard: AdminShell (sidebar), page (overview w/ traffic chart),
-                       articles, site (Site Settings), settings (AI), credentials,
-                       integrations, analytics, ads, articles/[id] (editor), _ui.tsx (shared)
+                       agent (AI Agent: topic/trending generation), articles, site
+                       (Site Settings), settings (AI), credentials, integrations,
+                       analytics, ads, articles/[id] (editor), _ui.tsx (shared)
+    mcp/route.ts       MCP control server (token-in-URL JSON-RPC, 20 tools)
     api/cron/generate  daily trigger (POST, Bearer CRON_SECRET)
-    api/telegram/webhook, api/views
-    sitemap.ts, robots.ts, feed.xml, news-sitemap.xml, stories-sitemap.xml,
-    web-stories/[slug] (AMP Google Web Story), manifest.ts, icon/apple-icon/opengraph-image
+    api/telegram/webhook, api/views (skips owner+bots → organic only)
+    robots.ts, feed.xml, sitemap_index.xml + post/page/category-sitemap.xml +
+    sitemap.xsl (styled), news-sitemap.xml, stories-sitemap.xml,
+    web-stories/[slug] (AMP Google Web Story), manifest.ts, icon.svg/apple-icon/opengraph-image
     proxy.ts           auth guard for /admin (Next 16 renamed middleware→proxy)
   lib/
     ai/                text.ts, image.ts, index.ts (runStep/runImage, key fallback dalle→openai)
-    agent/             pipeline.ts (7-step), prompts.ts (WRITING RULES), sources.ts (RSS), slug.ts, telegram.ts
+    agent/             pipeline.ts (runPipeline daily + generateArticleForTopic/reviseDraft
+                       on-demand), prompts.ts (rules+quality DB-driven), sources.ts
+                       (RSS discovery + gatherResearch multi-source), skills.ts, slug.ts, telegram.ts
+    mcp/               tools.ts (20 MCP tools), log.ts (action audit)
     crypto.ts          AES-256-GCM for api_keys
     supabase/          client.ts, server.ts, admin.ts (service role)
-    settings.ts (+ getSiteSettings), analytics.ts (traffic rollups, IST-aware),
-    api-keys.ts, articles.ts, public.ts, config.ts, site.ts, auth.ts
-  components/          rich-editor (TipTap), article-card, article-body, site-header/footer, icons, thumb, site-head
+    settings.ts (+ getSiteSettings/getAgentInstructions/getResearch/getQuality),
+    analytics.ts (traffic rollups, IST), sitemap.ts (XML builders),
+    api-keys.ts, articles.ts (+ listRelated), public.ts, config.ts, site.ts, ads.ts, auth.ts
+  components/          rich-editor (TipTap), article-card, article-body, site-header/footer,
+                       social-links, ad-slot, icons, thumb, site-head
 ```
 
 ## 6. AI agent pipeline (`src/lib/agent/pipeline.ts`)
-7 steps: **Discovery** (RSS feeds) → **Selection** → **Research** (fetch+trim) →
-**Angle** → **Write** → **Image** (gpt-image-1 → Supabase) → **Self-critique** →
-save (auto-publish if enabled).
+- **Daily (`runPipeline`):** Discovery (RSS) → Selection (dedupes recent titles) →
+  **Research (multi-source)** → Angle → Write → Image → Self-critique → save.
+- **On-demand (`generateArticleForTopic`):** researches the topic first, then writes a DRAFT
+  (used by the AI Agent admin page + MCP `write_article`/`test_article`). `reviseDraft` = AI edit.
+- **Research is now real & multi-source** (`sources.ts gatherResearch`): reads 4-5 actual news
+  sources via **free Google News RSS search** (no API key) + snippet fallback, grounds the
+  writing. This fixed "khokhle articles / AI invents facts". Source list saved to `source_urls`.
+- **Instructions + rules are DB-driven** (so MCP/UI can change them): `settings.agent_instructions`
+  (defaults to `WRITING_RULES` — owner's 8 rules), `settings.research_settings` (min_sources, depth),
+  `settings.quality_rules` (min/max words, facts_only, require_local_angle, ban_ai_slop, self_check).
+  `prompts.ts qualityBlock()` injects these into write + self-check. Skill notes (`skill_notes`) injected too.
 
-**Writing rules (`prompts.ts` `WRITING_RULES`)** — owner's 8 strict rules, enforced
-in the write step AND the self-check step: (1) no generic ending, (2) break up
-buzzword lists, (3) no forced local angle, (4) facts from source only / no
-hallucination, (5) one analytical "why this matters" sentence, (6) vary sentence
-length, (7) hybrid spoken Telugu (tech words in English), (8) no repetition.
+## 6b. MCP control server (`/mcp`) — LIVE
+Owner controls the blog from Claude (Settings → Connectors → custom connector).
+- **Endpoint:** `https://telugulo.in/mcp/?token=…` (trailing slash matters). Hand-rolled stateless
+  JSON-RPC in `app/mcp/route.ts` (no SDK). Auth = `MCP_AUTH_TOKEN` env (token-in-URL or Bearer).
+- **20 tools** (`lib/mcp/tools.ts`): content (write/list/get/revise/publish[confirm]/unpublish),
+  agent (get/update_agent_instructions[confirm], update_style_setting, test_article, add/list_skill_notes),
+  research (get/update_research_settings), quality (get/update_quality_rules[confirm]),
+  models (get_models, update_model), info (get_stats, get_cost). Important actions logged to `mcp_action_log`.
+- Token lives in EC2 `.env.production` + local `.env.local`. Rotate there + `pm2 reload --update-env`.
 
-## 7. Current settings (Supabase `settings` table)
-- `ai_models`: every step **OpenAI**. Writing = `gpt-4o`; all other steps = `gpt-4o-mini` (cheap)
+## 7. Current settings (Supabase `settings` table, key/jsonb)
+- `ai_models`: per-step provider+model. ⚠️ **Writing currently = `openai/gpt-4o-mini`** (cheapest) —
+  a quality lever; bump to gpt-4.1 or gemini-2.5-pro via Admin → AI Settings or MCP `update_model`.
 - `image_provider`: `dalle` (= gpt-image-1), **quality "low"** (~₹1.4/img) — set in `image.ts`
 - `features`: article ON, image ON, telegram OFF, learning ON, performance OFF, ads OFF
 - `general`: articles_per_day 1, **auto_publish TRUE**, publish_time 08:00
-- `integrations`: GSC verification set (verified ✓). GA/AdSense not set yet.
+- `agent_instructions` (DB-driven rules), `research_settings` (4 sources, deep), `quality_rules`
+  (600-900 words, facts_only ON, ban_ai_slop ON, self_check ON) — created on first MCP/UI write
+- `site` (name/tagline/socials), `integrations` (GSC verified ✓; GA/AdSense not set)
 
 ## 8. Credentials (`api_keys` table, encrypted) — current
 - ✅ `openai` (used for text + images via dalle→openai fallback)
@@ -101,8 +124,9 @@ length, (7) hybrid spoken Telugu (tech words in English), (8) no repetition.
 git add -A && git commit -m "..." && git push origin main
 # EC2
 ssh -i MYPROJECT.pem ubuntu@ec2-13-233-164-196...   # then:
-cd telugulo-next && git pull && npm install && npm run build && pm2 reload telugulo-next
+cd telugulo-next && git pull && npm run build && pm2 reload telugulo-next --update-env
 ```
+(`npm install` only needed when deps change. `--update-env` re-reads `.env.production`.)
 **Trigger generation now (on EC2):** `bash ~/telugulo-cron.sh`  (cost ~₹6-8)
 **PM2:** `pm2 status` · `pm2 logs telugulo-next` · `pm2 reload telugulo-next`
 
@@ -113,6 +137,10 @@ cd telugulo-next && git pull && npm install && npm run build && pm2 reload telug
 - **EC2 install:** use `npm install` not `npm ci` (Windows lockfile misses Linux optional deps `@emnapi`/`@floating-ui`).
 - **Integrations / head codes:** changes baked into static pages — need an EC2 rebuild OR Save via the LIVE admin (its action calls `revalidatePath`). In Integrations fields paste ONLY the value (e.g. `G-XXXX`), NOT the whole `<meta>`/`<script>` tag.
 - **proxy.ts** is Next 16's renamed middleware (function `proxy`).
+- **MCP:** connector URL needs the trailing slash before `?token=` (`/mcp/?token=…`). `MCP_AUTH_TOKEN` lives in `.env.production`; deploy MCP/env changes with `pm2 reload telugulo-next --update-env`.
+- **Dev server:** don't `rm -rf .next` while `next dev` is running — it corrupts the Turbopack cache (500s / panic). Stop the dev server first, then build.
+- **next/og (icons/OG):** Telugu glyphs need the bundled `src/app/_assets/NotoSansTelugu-700.woff` (Satori renders tofu otherwise). Don't delete it.
+- **Sitemap:** canonical is `/sitemap_index.xml` (styled via `/sitemap.xsl`) — the old Next `sitemap.ts` was removed.
 
 ## 12. Costs (~₹200-250/month at 1 article/day)
 - Image (gpt-image-1 low): ~₹1.4/img · Text (gpt-4o writing + mini steps): ~₹4-6/day
@@ -121,9 +149,11 @@ cd telugulo-next && git pull && npm install && npm run build && pm2 reload telug
 ## 13. Remaining TODOs
 - [ ] Cloudflare: switch A + www to **proxied (orange)** + SSL mode **Full (Strict)** for CDN/speed
 - [ ] GA4: create property → Measurement ID `G-XXXX` → Admin → Integrations
-- [ ] GSC: submit `sitemap.xml` + `news-sitemap.xml` + `stories-sitemap.xml` (Web Stories) — **prerequisite for Google Discover**
+- [ ] GSC: submit `sitemap_index.xml` + `news-sitemap.xml` + `stories-sitemap.xml` — **prerequisite for Google Discover**
 - [ ] Google Publisher Center (News) — add RSS `https://telugulo.in/feed.xml`
 - [ ] AdSense (after traffic) → publisher id in Integrations
+- [ ] **Quality:** bump writing model off `gpt-4o-mini` (e.g. gpt-4.1 / gemini-2.5-pro) for better articles
+- [ ] Site Settings: fill real social URLs (empty = hidden); MCP Phase C = ads + overview-agent tools
 - [ ] (optional) Telegram bot for draft approval; make GitHub repo private
 
 ## 14. Session history (what was built, in order)
@@ -138,7 +168,14 @@ Cloudflare + SSL (LIVE)** → GSC verified → stricter writing rules → low-co
 images → **taazatime-style red magazine redesign** (public site) + తె favicon →
 **admin upgrade**: page_views traffic analytics (Overview chart + today/yesterday
 + top articles), DB-driven **Site Settings** (name/tagline/socials), agent topic
-dedupe + ## subheadings, brand-consistent admin UI.
+dedupe + ## subheadings, brand-consistent admin UI → **real AMP Web Stories** +
+stories sitemap → **advanced Ads** (AI copy + keyword targeting + image upload) →
+article publish-time shown + **organic-only view counting** (skip owner/bots) →
+**MCP control server** (`/mcp`, 13→20 tools, DB-driven agent instructions) →
+**styled sitemap index** (`/sitemap_index.xml` + XSL) + admin post-time format →
+related posts + removed AI-disclaimer/back-link → **AI Agent admin page** →
+**multi-source research** (Google News, 4-5 real sources, facts-only) +
+**DB-driven quality/research/model rules** + new MCP control tools.
 
 ---
 *Update this file as the project changes so a fresh session stays in sync.*
