@@ -10,7 +10,8 @@ import {
 import { getSkillNoteTexts } from "./skills";
 import { runStep, runImage } from "@/lib/ai";
 import { uploadArticleImage } from "@/lib/storage";
-import { discoverCandidates, fetchArticleText, gatherResearch } from "./sources";
+import { discoverCandidates, fetchArticleText } from "./sources";
+import { researchTopic } from "./research";
 import { sanitizeSlug, ensureUniqueSlug } from "./slug";
 import {
   SYSTEM_EDITOR,
@@ -163,27 +164,26 @@ export async function runPipeline(): Promise<PipelineResult> {
       if (!cand) continue;
       log.push(`→ "${cand.title}" (${cand.source})`);
 
-      // STEP 3 — RESEARCH (primary source + corroborating sources)
+      // STEP 3 — RESEARCH: live web facts (Gemini grounding) + the primary source.
       const primary = await fetchArticleText(
         cand.link,
         researchSettings.depth === "basic" ? 2500 : 6000,
       );
-      const extra = await gatherResearch(cand.title, {
-        minSources: researchSettings.min_sources,
-        depth: researchSettings.depth,
-        seed: cand,
-      });
+      const web = await researchTopic(cand.title, researchSettings.min_sources);
       const researchText =
         [
-          primary ? `SOURCE — ${cand.source}: ${cand.title}\n${primary}` : "",
-          extra.text,
+          web.text ? `RESEARCHED FACTS (from live web search — use these):\n${web.text}` : "",
+          primary ? `PRIMARY SOURCE — ${cand.source}: ${cand.title}\n${primary}` : "",
         ]
           .filter(Boolean)
           .join("\n\n---\n\n") || cand.title;
-      const sources = extra.sources.length
-        ? extra.sources
+      const sources = web.sources.length
+        ? web.sources
         : [{ title: cand.title, link: cand.link, source: cand.source }];
-      log.push(`  Research: ${sources.length} source(s), ${researchText.length} chars`);
+      log.push(
+        `  Research: ${web.sources.length} web source(s), facts ${web.text.length} chars` +
+          (primary ? " + primary" : ""),
+      );
 
       // STEP 4 — ANGLE
       const angle = await runStep("angle", {
@@ -329,14 +329,11 @@ export async function generateArticleForTopic(
       ? Math.min(1500, Math.max(400, options.lengthWords))
       : Math.round((quality.min_words + quality.max_words) / 2);
 
-  // STEP — RESEARCH the topic across real sources first.
-  const research = await gatherResearch(topic, {
-    minSources: researchSettings.min_sources,
-    depth: researchSettings.depth,
-  });
-  const hasResearch = research.text.length > 200;
+  // STEP — RESEARCH the topic with live web search first (real facts).
+  const research = await researchTopic(topic, researchSettings.min_sources);
+  const hasResearch = research.text.length > 120;
   const researchText = hasResearch
-    ? research.text +
+    ? `RESEARCHED FACTS (from live web search — use ONLY these):\n${research.text}` +
       (options.forceLocalAngle
         ? "\n\n(Add a GENUINE Telugu / AP / Telangana / India angle if the facts support one.)"
         : "")
