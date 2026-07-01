@@ -43,7 +43,8 @@ src/
     admin/             dashboard: AdminShell (sidebar), page (overview w/ traffic chart),
                        agent (AI Agent: topic/trending generation), articles, site
                        (Site Settings), settings (AI), credentials, integrations,
-                       analytics, ads, articles/[id] (editor), _ui.tsx (shared)
+                       analytics, ads, articles/[id] (editor: body/meta/image +
+                       editable URL slug; "New (manual)" creates a blank draft), _ui.tsx (shared)
     mcp/route.ts       MCP control server (token-in-URL JSON-RPC, 20 tools)
     api/cron/generate  daily trigger (POST, Bearer CRON_SECRET)
     api/telegram/webhook, api/views (skips owner+bots → organic only)
@@ -179,8 +180,11 @@ article publish-time shown + **organic-only view counting** (skip owner/bots) �
 **MCP control server** (`/mcp`, 13→20 tools, DB-driven agent instructions) →
 **styled sitemap index** (`/sitemap_index.xml` + XSL) + admin post-time format →
 related posts + removed AI-disclaimer/back-link → **AI Agent admin page** →
-**multi-source research** (Google News, 4-5 real sources, facts-only) +
-**DB-driven quality/research/model rules** + new MCP control tools.
+**DB-driven quality/research/model rules** + new MCP control tools →
+**research FIX**: real live web search via **Gemini Google-Search grounding**
+(replaced the broken Google-News-link fetch) → articles now have real facts
+(dates/numbers/prices) with citations → **manual article creation** ("New (manual)"
+blank draft) + **editable URL slug** in the editor.
 
 ---
 *Update this file as the project changes so a fresh session stays in sync.*
