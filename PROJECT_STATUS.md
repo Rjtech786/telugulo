@@ -54,8 +54,9 @@ src/
   lib/
     ai/                text.ts, image.ts, index.ts (runStep/runImage, key fallback dalle→openai)
     agent/             pipeline.ts (runPipeline daily + generateArticleForTopic/reviseDraft
-                       on-demand), prompts.ts (rules+quality DB-driven), sources.ts
-                       (RSS discovery + gatherResearch multi-source), skills.ts, slug.ts, telegram.ts
+                       on-demand), prompts.ts (rules+quality DB-driven), sources.ts (RSS
+                       discovery), research.ts (Gemini Google-Search grounding → real facts),
+                       skills.ts, slug.ts, telegram.ts
     mcp/               tools.ts (20 MCP tools), log.ts (action audit)
     crypto.ts          AES-256-GCM for api_keys
     supabase/          client.ts, server.ts, admin.ts (service role)
@@ -71,9 +72,13 @@ src/
   **Research (multi-source)** → Angle → Write → Image → Self-critique → save.
 - **On-demand (`generateArticleForTopic`):** researches the topic first, then writes a DRAFT
   (used by the AI Agent admin page + MCP `write_article`/`test_article`). `reviseDraft` = AI edit.
-- **Research is now real & multi-source** (`sources.ts gatherResearch`): reads 4-5 actual news
-  sources via **free Google News RSS search** (no API key) + snippet fallback, grounds the
-  writing. This fixed "khokhle articles / AI invents facts". Source list saved to `source_urls`.
+- **Research = real LIVE web search** (`research.ts researchTopic`): uses **Gemini's Google Search
+  grounding** — Gemini actually searches the web, reads current sources, and returns concrete FACTS
+  (dates, numbers, names, prices, quotes) with citations. The writer works ONLY from these facts.
+  This fixed hollow/factless articles. Real source domains saved to `source_urls`. Needs the
+  **gemini key** (set ✓); if missing, daily falls back to the primary RSS source, on-demand to model
+  knowledge. ⚠️ The earlier Google-News-link fetch was broken (redirect links = Google JS pages, not
+  article text) — do not reintroduce it.
 - **Instructions + rules are DB-driven** (so MCP/UI can change them): `settings.agent_instructions`
   (defaults to `WRITING_RULES` — owner's 8 rules), `settings.research_settings` (min_sources, depth),
   `settings.quality_rules` (min/max words, facts_only, require_local_angle, ban_ai_slop, self_check).
