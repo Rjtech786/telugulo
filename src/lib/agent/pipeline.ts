@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { StepKey } from "@/lib/config";
 import {
   getFeatures,
   getGeneral,
@@ -8,7 +9,7 @@ import {
   getQualityRules,
 } from "@/lib/settings";
 import { getSkillNoteTexts } from "./skills";
-import { runStep, runImage } from "@/lib/ai";
+import { runStep, runStepWithFallback, runImage } from "@/lib/ai";
 import { uploadArticleImage } from "@/lib/storage";
 import { discoverCandidates, fetchArticleText } from "./sources";
 import { researchTopic } from "./research";
@@ -96,23 +97,28 @@ function parseQualityOutput(raw: string): { verdict: string; body: string } {
   };
 }
 
-/** Parse the SEO agent's VERDICT + fixed fields output. */
+/** Parse the SEO agent's VERDICT + fixed fields (+ headline + linked body) output. */
 function parseSeoOutput(raw: string): {
   verdict: string;
+  headline: string;
   title_meta: string;
   meta_description: string;
   slug: string;
+  body: string;
 } {
   const s = stripFences(raw);
   const field = (label: string) => {
     const m = s.match(new RegExp(`^${label}:[ \\t]*(.*)$`, "mi"));
     return m ? m[1].trim() : "";
   };
+  const bodyMatch = s.match(/^BODY:[ \t]*\n?([\s\S]*)$/im);
   return {
     verdict: field("VERDICT") || "OK",
+    headline: field("HEADLINE"),
     title_meta: field("TITLE_META"),
     meta_description: field("META_DESCRIPTION"),
     slug: field("SLUG"),
+    body: bodyMatch ? bodyMatch[1].trim() : "",
   };
 }
 
@@ -161,6 +167,25 @@ export async function runPipeline(
     return logMessage({ runId, agent, direction, status, message, detail });
   };
 
+  // Reliability: run a step with provider fallback (Phase D) and, if the
+  // fallback fired, tell the CEO feed so it's visible in the dashboard.
+  const step = async (
+    agent: AgentId,
+    key: StepKey,
+    params: Parameters<typeof runStepWithFallback>[1],
+  ) => {
+    const res = await runStepWithFallback(key, params);
+    if (res.usedFallback) {
+      await note(
+        "ceo",
+        "ceo_to_agent",
+        "fixed",
+        `${agent} step me ${res.primaryProvider} fail hua (${res.primaryError ?? "error"}) — ${res.usedFallback} par retry kiya, safal raha.`,
+      );
+    }
+    return res;
+  };
+
   try {
     const features = await getFeatures();
     if (!features.article_generation) {
@@ -197,7 +222,7 @@ export async function runPipeline(
     const recentTitles = (recentRows ?? []).map((r) => r.title as string);
 
     // STEP 1b — TOPIC SCOUT: selection
-    const sel = await runStep("chunaav", {
+    const sel = await step("topic_scout", "chunaav", {
       system: SYSTEM_EDITOR,
       prompt: selectionPrompt(candidates, count, recentTitles),
       maxTokens: 600,
@@ -254,14 +279,14 @@ export async function runPipeline(
 
       // STEP 3 — WRITER: angle + write
       await note("writer", "ceo_to_agent", "working", "Writer ko angle + article likhne bhej raha hoon.");
-      const angle = await runStep("angle", {
+      const angle = await step("writer", "angle", {
         system: SYSTEM_EDITOR,
         prompt: anglePrompt(cand.title, researchText),
         maxTokens: 400,
         temperature: 0.7,
       });
 
-      const written = await runStep("writing", {
+      const written = await step("writer", "writing", {
         system: SYSTEM_EDITOR,
         prompt: writingPrompt({
           title: cand.title,
@@ -289,7 +314,7 @@ export async function runPipeline(
       if (qualityRules.self_check) {
         await note("quality", "ceo_to_agent", "working", "Quality & Humanizer ko bhej raha hoon — meaning, human-tone, aur hard Telugu check karne.");
         try {
-          const checked = await runStep("quality_check", {
+          const checked = await step("quality", "quality_check", {
             system: SYSTEM_EDITOR,
             prompt: qualityHumanizePrompt(article.body, rules, qualityRules),
             maxTokens: 4000,
@@ -309,32 +334,51 @@ export async function runPipeline(
         }
       }
 
-      // Draft SEO fields (pre-fix); slug gets sanitized before the uniqueness check.
+      // Draft headline/SEO fields (pre-fix); slug gets sanitized before the
+      // uniqueness check.
+      let headline = article.headline;
       let titleMeta = article.title_meta;
       let metaDescription = article.meta_description;
       let slugCandidate = article.slug || article.headline;
 
-      // STEP 5 — SEO AGENT (auto-fixes inline)
-      await note("seo", "ceo_to_agent", "working", "SEO agent ko bhej raha hoon — title/meta/slug/headings check karne.");
+      // Candidate past articles (same category) for the internal-linking task.
+      const { data: relatedRows } = await supabase
+        .from("articles")
+        .select("title, slug")
+        .eq("status", "published")
+        .eq("category", (article.category || "tech").toLowerCase())
+        .order("published_at", { ascending: false })
+        .limit(8);
+      const relatedArticles = (relatedRows ?? []) as { title: string; slug: string }[];
+
+      // STEP 5 — SEO AGENT (auto-fixes inline: headline-body alignment,
+      // title/meta/slug, + inserts 2-3 internal links to related articles)
+      await note("seo", "ceo_to_agent", "working", "SEO agent ko bhej raha hoon — headline alignment, title/meta/slug, internal links check karne.");
       let seoNote = "OK";
       try {
-        const seoRes = await runStep("seo_check", {
+        const seoRes = await step("seo", "seo_check", {
           system: SYSTEM_EDITOR,
           prompt: seoAuditPrompt({
-            headline: article.headline,
+            headline,
             title_meta: titleMeta,
             meta_description: metaDescription,
             slug: slugCandidate,
             body: finalBody,
+            relatedArticles,
           }),
-          maxTokens: 500,
+          maxTokens: 4000,
           temperature: 0.3,
         });
         const seo = parseSeoOutput(seoRes.text);
         seoNote = seo.verdict;
+        if (seo.headline && seo.headline.trim() && seo.headline.trim() !== headline.trim()) {
+          await note("seo", "agent_to_ceo", "fixed", `headline_mismatch fix: "${headline}" -> "${seo.headline.trim()}"`);
+          headline = seo.headline.trim();
+        }
         if (seo.title_meta) titleMeta = seo.title_meta;
         if (seo.meta_description) metaDescription = seo.meta_description;
         if (seo.slug) slugCandidate = seo.slug;
+        if (seo.body && seo.body.length > finalBody.length * 0.7) finalBody = seo.body;
         const changed = !/^ok/i.test(seo.verdict);
         await note("seo", "agent_to_ceo", changed ? "fixed" : "done", seo.verdict);
       } catch (e) {
@@ -349,7 +393,7 @@ export async function runPipeline(
       if (features.image_generation) {
         await note("image", "ceo_to_agent", "working", "Image agent ko header image banane bhej raha hoon.");
         try {
-          const img = await runImage(imagePrompt(article.headline, article.category));
+          const img = await runImage(imagePrompt(headline, article.category));
           imageUrl = await uploadArticleImage(img.bytes, img.contentType, slug);
           await note("image", "agent_to_ceo", "done", "Header image ban gaya + upload ho gaya.");
         } catch (e) {
@@ -364,7 +408,7 @@ export async function runPipeline(
         .from("articles")
         .insert({
           slug,
-          title: article.headline,
+          title: headline,
           title_meta: titleMeta,
           meta_description: metaDescription,
           summary: article.summary,
@@ -385,10 +429,10 @@ export async function runPipeline(
 
       // STEP 7 — CEO FINAL VERDICT
       try {
-        const verdict = await runStep("ceo", {
+        const verdict = await step("ceo", "ceo", {
           system: SYSTEM_EDITOR,
           prompt: ceoVerdictPrompt({
-            title: article.headline,
+            title: headline,
             wordCount: finalBody.split(/\s+/).length,
             qualityNote,
             seoNote,
@@ -403,14 +447,14 @@ export async function runPipeline(
           "ceo",
           "ceo_to_agent",
           "done",
-          `Team ne kaam pura kiya — "${article.headline}" ${publishNow ? "publish ho gaya" : "draft me ready hai"}.`,
+          `Team ne kaam pura kiya — "${headline}" ${publishNow ? "publish ho gaya" : "draft me ready hai"}.`,
         );
       }
 
       // Telegram notification (non-fatal)
       if (features.telegram_notifications) {
         try {
-          await notifyDraft({ id: draft.id, title: article.headline, summary: article.summary });
+          await notifyDraft({ id: draft.id, title: headline, summary: article.summary });
           log.push("  Telegram: notified");
         } catch (e) {
           log.push(`  Telegram: failed (${e instanceof Error ? e.message : "error"})`);

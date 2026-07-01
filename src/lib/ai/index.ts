@@ -1,5 +1,5 @@
 import "server-only";
-import type { StepKey, CredentialProvider } from "@/lib/config";
+import type { StepKey, CredentialProvider, TextProvider } from "@/lib/config";
 import { getModelMap, getImageProvider } from "@/lib/settings";
 import { getDecryptedKey } from "@/lib/api-keys";
 import { generateText, type TextGenParams, type TextGenResult } from "./text";
@@ -40,6 +40,49 @@ export async function runStep(
   // Text provider ids ("claude"/"openai"/"gemini") match credential ids.
   const key = await keyFor(provider as CredentialProvider);
   return generateText(provider, model, key, params);
+}
+
+// Reliability: if a step's configured provider throws (rate limit, outage,
+// bad key), retry once on a different provider instead of aborting the whole
+// run — e.g. Claude fails -> retried on Gemini.
+const FALLBACK_ORDER: TextProvider[] = ["gemini", "openai", "claude"];
+const FALLBACK_MODEL: Record<TextProvider, string> = {
+  claude: "claude-sonnet-4-6",
+  openai: "gpt-4o",
+  gemini: "gemini-2.5-flash",
+};
+
+export type StepResult = TextGenResult & {
+  usedFallback?: TextProvider;
+  primaryProvider?: TextProvider;
+  primaryError?: string;
+};
+
+/** Same as runStep, but retries once on a different provider if the primary fails. */
+export async function runStepWithFallback(
+  step: StepKey,
+  params: TextGenParams,
+): Promise<StepResult> {
+  const map = await getModelMap();
+  const { provider, model } = map[step];
+  try {
+    const key = await keyFor(provider as CredentialProvider);
+    return await generateText(provider, model, key, params);
+  } catch (primaryErr) {
+    const primaryError = primaryErr instanceof Error ? primaryErr.message : "unknown error";
+    for (const fb of FALLBACK_ORDER) {
+      if (fb === provider) continue;
+      try {
+        const fbKey = await getDecryptedKey(fb as CredentialProvider);
+        if (!fbKey) continue;
+        const result = await generateText(fb, FALLBACK_MODEL[fb], fbKey, params);
+        return { ...result, usedFallback: fb, primaryProvider: provider, primaryError };
+      } catch {
+        continue;
+      }
+    }
+    throw primaryErr;
+  }
 }
 
 /** Generate the featured image with the configured image provider. */

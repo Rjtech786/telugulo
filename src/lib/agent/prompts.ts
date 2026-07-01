@@ -196,15 +196,23 @@ BODY:
 }
 
 // ─── SEO agent (CEO system) ───
-// Audits + auto-fixes the SEO-facing fields. Also checks the body has
-// scannable subheadings. Always fixes inline (no round-trip to the writer).
+// Audits + auto-fixes the SEO-facing fields, checks headline-body alignment
+// (Google's Feb-2026 Discover classifier suppresses mismatches), and inserts
+// 2-3 internal links to related past articles. Always fixes inline (no
+// round-trip to the writer).
 export function seoAuditPrompt(input: {
   headline: string;
   title_meta: string;
   meta_description: string;
   slug: string;
   body: string;
+  relatedArticles?: { title: string; slug: string }[];
 }): string {
+  const relatedBlock = input.relatedArticles?.length
+    ? `\n\nRELATED PAST ARTICLES on telugulo.in you may link to (use ONLY these exact slugs, do not invent any):\n${input.relatedArticles
+        .map((r, i) => `${i + 1}. "${r.title}" -> /${r.slug}/`)
+        .join("\n")}`
+    : "";
   return `You are the SEO agent for telugulo.in (Google Discover + Search matter a lot). Audit these fields for a Telugu news article and FIX any problems directly:
 
 HEADLINE: ${input.headline}
@@ -215,13 +223,22 @@ SLUG (must be romanized lowercase, hyphens only, no Telugu script, 4-6 keyword-f
 BODY (check it has 2-3 "## " subheadings and the main keyword appears early):
 ${input.body}
 
-Fix TITLE_META/META_DESCRIPTION/SLUG if they violate any rule above (length, clickbait, missing keyword, bad slug format). If a field is already fine, return it unchanged.
+TASKS:
+1. HEADLINE-BODY ALIGNMENT (CRITICAL): does the HEADLINE accurately represent what the BODY actually says, with nothing overpromised or clickbait-y? Google's Discover classifier suppresses headline-content mismatches even when the body itself is accurate. If it overpromises or doesn't match, REWRITE the headline to honestly reflect the body (still clean and engaging). If it's already aligned, return it unchanged.
+2. Fix TITLE_META/META_DESCRIPTION/SLUG if they violate any rule above (length, clickbait, missing keyword, bad slug format). If a field is already fine, return it unchanged.${
+    input.relatedArticles?.length
+      ? `\n3. INTERNAL LINKING: naturally insert 2-3 contextual internal links into the BODY pointing to the most topically relevant articles from the list below, using markdown link syntax like [anchor text](/slug/). Prefer anchor text from words/phrases already in the body, or add a short natural connecting phrase. Only link articles that are a genuine topical fit — use fewer than 2-3, or none, if nothing fits well. Do NOT change any fact or meaning in the body — only add link markup and, if needed, a couple of connecting words.${relatedBlock}`
+      : ""
+  }
 
-Respond in EXACTLY this format (plain text, one line each, no markdown):
-VERDICT: <one short line — what you fixed, e.g. "Shortened title_meta, fixed slug" or "OK — all fields already SEO-clean">
+Respond in EXACTLY this format (HEADLINE/TITLE_META/META_DESCRIPTION/SLUG each on a single plain-text line, BODY last and may span many lines with its markdown preserved):
+VERDICT: <one short line — what you fixed, e.g. "Rewrote mismatched headline, added 2 internal links" or "OK — all fields already clean">
+HEADLINE: <final headline>
 TITLE_META: <final value>
 META_DESCRIPTION: <final value>
-SLUG: <final value>`;
+SLUG: <final value>
+BODY:
+<final body, markdown preserved, with any internal links inserted>`;
 }
 
 // ─── CEO agent — final verdict on a completed run ───
@@ -243,6 +260,20 @@ Publish decision: ${summary.willPublish ? "will auto-publish now" : "saved as dr
 As CEO, write ONE short, confident sentence (Hinglish/hybrid Telugu ok) giving your final verdict on this run to the owner — like a real CEO signing off on their team's work. Be specific (mention the fixes if any), not generic.
 
 Respond with ONLY that one sentence, no preamble, no quotes.`;
+}
+
+// ─── Performance agent — weekly self-learning from real traffic data ───
+export function performanceAnalysisPrompt(digest: string): string {
+  return `You are the PERFORMANCE agent for telugulo.in. Below is REAL traffic data (page views) from recently published articles, broken down by category, word count, and headline length.
+
+${digest}
+
+Based ONLY on this data (do not assume anything not shown), identify 2-5 concrete, actionable patterns that separate higher-traffic from lower-traffic articles. Each insight must be something the Writer/Topic Scout agents can directly apply going forward (e.g. "AI category articles get far more traffic than gadgets — prioritize AI topics when picking today's story" or "Articles under 800 words outperform longer ones — keep length closer to the lower end").
+
+If the sample is too small or noisy to say anything confident and specific, return fewer insights (even zero) rather than inventing a shaky pattern.
+
+Respond ONLY with JSON (no markdown):
+{"insights": [{"problem_type": "<short label, e.g. 'category performance'>", "solution_note": "<one actionable sentence>"}]}`;
 }
 
 // ─── Ads: AI ad-copy composer (image + link + keywords → polished ad) ───

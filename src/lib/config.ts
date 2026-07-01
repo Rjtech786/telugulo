@@ -244,4 +244,5 @@ export const SETTINGS_KEYS = {
   agentInstructions: "agent_instructions",
   research: "research_settings",
   quality: "quality_rules",
+  performanceState: "performance_state",
 } as const;

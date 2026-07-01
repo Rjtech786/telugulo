@@ -61,6 +61,9 @@ export default async function ArticlePage({
 
   const author = a.author_id ? await getAuthor(a.author_id) : null;
   const related = await listRelated(a.category, a.id, 6);
+  const sourceLinks = (a.source_urls ?? []).filter(
+    (s): s is { title?: string; url: string; source?: string } => Boolean(s.url),
+  );
   const url = `${SITE.url}/${a.slug}/`;
 
   const breadcrumb = [
@@ -174,6 +177,26 @@ export default async function ArticlePage({
           body: a.body,
         }}
       />
+
+      {sourceLinks.length > 0 && (
+        <div className="mt-8 rounded-xl border border-line bg-surface p-4 text-sm">
+          <div className="mb-2 font-semibold text-ink">మూలాలు (Sources)</div>
+          <ul className="space-y-1.5">
+            {sourceLinks.map((s, i) => (
+              <li key={i} className="truncate">
+                <a
+                  href={s.url}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  className="text-accent hover:underline"
+                >
+                  {s.title || s.source || s.url}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {author?.bio && (
         <div className="mt-8 rounded-xl border border-line bg-surface p-4 text-sm">

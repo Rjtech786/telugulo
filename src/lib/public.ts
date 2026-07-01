@@ -24,6 +24,7 @@ export type PublicArticle = {
   category: string | null;
   image_url: string | null;
   author_id: string | null;
+  source_urls?: { title?: string; url?: string; source?: string }[] | null;
   published_at: string | null;
   created_at: string;
   updated_at?: string | null;

@@ -94,8 +94,16 @@ history table.
 - **Agents:** Topic Scout (discovery+selection) → Researcher (web facts) →
   Writer (angle+write) → **Quality & Humanizer** (checks meaning-complete +
   human tone, simplifies hard/textbook Telugu into spoken Telugu — auto-fixes
-  inline) → **SEO agent** (audits+auto-fixes title_meta/meta_description/slug
-  — auto-fixes inline) → Image agent → **CEO final verdict** (one-line sign-off).
+  inline) → **SEO agent** (audits+auto-fixes title_meta/meta_description/slug,
+  checks headline-body alignment — auto-rewrites the headline if it overpromises
+  vs the body [`headline_mismatch` fix, logged], inserts 2-3 internal links to
+  related past articles in the same category — auto-fixes inline) → Image
+  agent → **CEO final verdict** (one-line sign-off).
+- **Reliability:** every text step (chunaav/angle/writing/quality/seo/ceo) now
+  retries once on a different provider if the configured one throws (rate
+  limit, outage) instead of aborting the run — e.g. Claude fails → retried on
+  Gemini. Logged as a CEO message when it fires. See `lib/ai/index.ts
+  runStepWithFallback`.
 - **DB:** `agent_runs` (one row per run) + `agent_messages` (CEO↔agent
   timeline) — migration `0007_ceo_agent_system.sql`.
 - **Code:** `lib/agent/agentLog.ts` (run/message log helpers), `lib/agent/
@@ -120,6 +128,29 @@ Owner controls the blog from Claude (Settings → Connectors → custom connecto
   research (get/update_research_settings), quality (get/update_quality_rules[confirm]),
   models (get_models, update_model), info (get_stats, get_cost). Important actions logged to `mcp_action_log`.
 - Token lives in EC2 `.env.production` + local `.env.local`. Rotate there + `pm2 reload --update-env`.
+
+## 6c. E-E-A-T + Performance agent (Advanced Roadmap Phase A/B) — LIVE
+- **Sources block:** every article page shows a "మూలాలు (Sources)" box (right
+  before the author bio) linking out to the real `source_urls` collected at
+  research time — direct trust signal for Discover. Hidden automatically if
+  an article has no URL-bearing sources (e.g. on-demand articles). Code:
+  `app/(site)/[slug]/page.tsx`, `source_urls` added to `lib/public.ts`'s
+  `PublicArticle` type.
+- **Performance agent:** `lib/agent/performance.ts runPerformanceAnalysis()`
+  — gated by the `performance_analysis` feature flag (default OFF) and the
+  `cost.performance_frequency` setting (weekly/monthly). Piggybacks on the
+  existing daily `/api/cron/generate` hit (self-gates via a persisted
+  `performance_state.last_run_at`, so no separate EC2 cron entry is needed).
+  Reads `page_views`-windowed traffic (last 90 days) + category/word-count/
+  headline-length, asks the `performance` step for 2-5 actionable patterns,
+  and writes them straight into `skill_notes` (already auto-injected into
+  every writing prompt) — so the Writer/Topic Scout get smarter automatically.
+  ⚠️ Uses internal page_views data only — the roadmap's GSC Search Analytics
+  (clicks/impressions/position) integration is NOT built (needs a Search
+  Console OAuth credential that doesn't exist yet); deferred.
+  Note: `lib/insights.ts generateWeeklyInsights()` (Admin → Analytics manual
+  "run now" report → `performance_insights` table) is a separate, older,
+  human-facing feature — left untouched.
 
 ## 7. Current settings (Supabase `settings` table, key/jsonb)
 - `ai_models`: per-step provider+model. ⚠️ **Writing currently = `openai/gpt-4o-mini`** (cheapest) —
@@ -186,6 +217,8 @@ cd telugulo-next && git pull && npm run build && pm2 reload telugulo-next --upda
 - [ ] AdSense (after traffic) → publisher id in Integrations
 - [ ] **Quality:** bump writing model off `gpt-4o-mini` (e.g. gpt-4.1 / gemini-2.5-pro) for better articles
 - [ ] Site Settings: fill real social URLs (empty = hidden); MCP Phase C = ads + overview-agent tools
+- [ ] Turn ON `performance_analysis` feature (Admin → Settings) once there's enough traffic history for the Performance agent to say something meaningful
+- [ ] GSC Search Analytics API credential (OAuth) — needed to feed real clicks/impressions/position into the Performance agent (currently internal `page_views` only)
 - [ ] (optional) Telegram bot for draft approval; make GitHub repo private
 
 ## 14. Session history (what was built, in order)
@@ -214,7 +247,14 @@ blank draft) + **editable URL slug** in the editor → **CEO multi-agent system*
 named specialist agents (Topic Scout/Researcher/Writer/Quality & Humanizer/SEO/Image)
 orchestrated by a CEO with full run+message logging (`agent_runs`/`agent_messages`),
 shown live in Admin → AI Agent as an animated master/slave diagram; Quality &
-Humanizer now auto-simplifies hard Telugu, SEO agent auto-fixes meta fields.
+Humanizer now auto-simplifies hard Telugu, SEO agent auto-fixes meta fields
+→ **Advanced Roadmap Phase A/D1/B**: SEO agent now checks headline-body
+alignment (auto-rewrites + logs `headline_mismatch`) and inserts 2-3 internal
+links to related past articles; visible "Sources" block on article pages;
+every CEO pipeline step retries once on a different AI provider before
+failing the run; **Performance agent** wired up — reads `page_views` traffic
+on a weekly/monthly cadence and feeds actionable patterns into `skill_notes`
+automatically (`ADVANCED_ROADMAP.md` written the same day to track the rest).
 
 ---
 *Update this file as the project changes so a fresh session stays in sync.*

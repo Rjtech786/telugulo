@@ -167,6 +167,18 @@ export async function getCost(): Promise<CostSettings> {
   return { ...DEFAULT_COST, ...saved };
 }
 
+/** Last-run tracking for the weekly/monthly Performance agent job. */
+export type PerformanceState = { last_run_at: string | null };
+
+export async function getPerformanceState(): Promise<PerformanceState> {
+  const saved = await readSetting<PerformanceState>(SETTINGS_KEYS.performanceState);
+  return saved ?? { last_run_at: null };
+}
+
+export async function setPerformanceLastRun(iso: string): Promise<void> {
+  await writeSetting(SETTINGS_KEYS.performanceState, { last_run_at: iso });
+}
+
 /**
  * Public site settings (name, tagline, description, footer, social links).
  * Merged over code defaults; empty social URLs are simply not rendered.
