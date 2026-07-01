@@ -4,7 +4,7 @@
 > state. (No secrets here — repo is public. Real secrets live in `.env.local`
 > locally and `.env.production` on the EC2.)
 
-**Last updated:** 2026-06-30 · **Owner:** Roshan (roshanjameer8786@gmail.com)
+**Last updated:** 2026-07-01 · **Owner:** Roshan (roshanjameer8786@gmail.com)
 
 ---
 
@@ -84,6 +84,32 @@ src/
   (defaults to `WRITING_RULES` — owner's 8 rules), `settings.research_settings` (min_sources, depth),
   `settings.quality_rules` (min/max words, facts_only, require_local_angle, ban_ai_slop, self_check).
   `prompts.ts qualityBlock()` injects these into write + self-check. Skill notes (`skill_notes`) injected too.
+
+## 6a. CEO multi-agent system (Admin → AI Agent) — LIVE
+The daily pipeline is now run by a **CEO orchestrator** that assigns work to
+named specialist agents and logs every hand-off, shown live in
+**Admin → AI Agent** as an animated master/slave diagram (CEO in the center,
+signal dots travel to/from each agent node) + a live message feed + run
+history table.
+- **Agents:** Topic Scout (discovery+selection) → Researcher (web facts) →
+  Writer (angle+write) → **Quality & Humanizer** (checks meaning-complete +
+  human tone, simplifies hard/textbook Telugu into spoken Telugu — auto-fixes
+  inline) → **SEO agent** (audits+auto-fixes title_meta/meta_description/slug
+  — auto-fixes inline) → Image agent → **CEO final verdict** (one-line sign-off).
+- **DB:** `agent_runs` (one row per run) + `agent_messages` (CEO↔agent
+  timeline) — migration `0007_ceo_agent_system.sql`.
+- **Code:** `lib/agent/agentLog.ts` (run/message log helpers), `lib/agent/
+  pipeline.ts runPipeline()` (now orchestrates + logs every step),
+  `lib/agent/prompts.ts` (`qualityHumanizePrompt`, `seoAuditPrompt`,
+  `ceoVerdictPrompt`), `admin/agent/CeoSystem.tsx` (the animated UI, polls
+  `getCeoOverview`/`getCeoRunStatus` server actions).
+- **Scope:** powers the **daily 8 AM cron** and the manual "⚡ Abhi run karo"
+  button (same `runPipeline()`); on-demand topic-based generation
+  (`generateArticleForTopic`, MCP `write_article`) is unchanged/separate.
+- New pipeline step keys for model selection (Admin → AI Settings):
+  `quality_check`, `seo_check`, `ceo`.
+- The "Quality & Humanizer" step is gated by the existing `quality_rules.self_check`
+  toggle (Admin → AI Settings). SEO agent always runs.
 
 ## 6b. MCP control server (`/mcp`) — LIVE
 Owner controls the blog from Claude (Settings → Connectors → custom connector).
@@ -184,7 +210,11 @@ related posts + removed AI-disclaimer/back-link → **AI Agent admin page** →
 **research FIX**: real live web search via **Gemini Google-Search grounding**
 (replaced the broken Google-News-link fetch) → articles now have real facts
 (dates/numbers/prices) with citations → **manual article creation** ("New (manual)"
-blank draft) + **editable URL slug** in the editor.
+blank draft) + **editable URL slug** in the editor → **CEO multi-agent system**:
+named specialist agents (Topic Scout/Researcher/Writer/Quality & Humanizer/SEO/Image)
+orchestrated by a CEO with full run+message logging (`agent_runs`/`agent_messages`),
+shown live in Admin → AI Agent as an animated master/slave diagram; Quality &
+Humanizer now auto-simplifies hard Telugu, SEO agent auto-fixes meta fields.
 
 ---
 *Update this file as the project changes so a fresh session stays in sync.*

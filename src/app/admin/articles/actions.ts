@@ -19,7 +19,7 @@ import { imagePrompt } from "@/lib/agent/prompts";
 
 export async function generateNow(): Promise<PipelineResult> {
   await requireAdmin();
-  const result = await runPipeline();
+  const result = await runPipeline(undefined, "manual");
   revalidatePath("/admin/articles");
   return result;
 }

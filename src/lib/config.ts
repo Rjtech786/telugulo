@@ -48,6 +48,9 @@ export type StepKey =
   | "angle"
   | "writing"
   | "self_check"
+  | "quality_check"
+  | "seo_check"
+  | "ceo"
   | "learning"
   | "performance"
   | "ads";
@@ -65,6 +68,9 @@ export const PIPELINE_STEPS: {
   { key: "angle", label: "Angle", hint: "needs some thinking", defaultProvider: "claude", defaultModel: "claude-sonnet-4-6" },
   { key: "writing", label: "Writing", hint: "THE real work — quality = traffic", defaultProvider: "claude", defaultModel: "claude-opus-4-8" },
   { key: "self_check", label: "Self-check", hint: "editorial review", defaultProvider: "claude", defaultModel: "claude-sonnet-4-6" },
+  { key: "quality_check", label: "Quality & Humanizer agent", hint: "checks meaning/human tone, simplifies hard Telugu, auto-fixes", defaultProvider: "claude", defaultModel: "claude-sonnet-4-6" },
+  { key: "seo_check", label: "SEO agent", hint: "checks + auto-fixes title/meta/slug/headings", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
+  { key: "ceo", label: "CEO agent", hint: "orchestrates all agents, final verdict", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
   { key: "learning", label: "Learning agent", hint: "data analysis", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
   { key: "performance", label: "Performance analysis", hint: "pattern finding", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
   { key: "ads", label: "Ads placement", hint: "simple decision", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },

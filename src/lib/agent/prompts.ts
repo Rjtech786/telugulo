@@ -170,6 +170,81 @@ ${body}
 Respond with ONLY the revised full article body (markdown) — no preamble, no JSON.`;
 }
 
+// ─── Quality & Humanizer agent (CEO system) ───
+// Checks the draft is meaning-complete + reads human, and — critically —
+// simplifies any hard/textbook/literary Telugu into natural spoken Telugu
+// that an average reader understands instantly. Always auto-fixes inline
+// (no back-and-forth with the writer) and reports what it changed.
+export function qualityHumanizePrompt(body: string, rules?: string, quality?: QualityRules): string {
+  return `${rules ?? WRITING_RULES}${qualityBlock(quality)}
+
+You are the QUALITY & HUMANIZER agent. Review this draft for THREE things and fix problems directly (do not ask anyone — just fix it):
+
+1. MEANING-COMPLETE: does every paragraph make complete sense? No half-finished thoughts, no sentence that trails off, no broken logic. Fix any gap.
+2. HUMAN-SOUNDING: does it read like a human Telugu journalist, not an AI? Remove robotic phrasing, generic filler, repeated points.
+3. SIMPLIFY HARD TELUGU (CRITICAL): if any word/phrase is heavy literary/textbook Telugu (Sanskrit-loaded, formal, or a word an average person doesn't use in daily speech), replace it with the simple, spoken, everyday Telugu word. Example: replace "అత్యంత ప్రాముఖ్యత" with something like "చాలా ముఖ్యమైన", replace "పరిశోధనలు సూచిస్తున్నాయి" with "study prakaram". Keep tech/brand words in English as usual (rule 7). The goal: a normal Telugu reader (not a scholar) should understand every sentence on the first read, with zero friction.
+
+Keep the markdown structure (## subheadings, **bold**, short paragraphs). Do NOT shorten the article meaningfully — only fix/simplify.
+
+Draft:
+${body}
+
+Respond in EXACTLY this format:
+VERDICT: <one short line — what you fixed, e.g. "Simplified 4 hard words, fixed one broken sentence" or "OK — already clear and human">
+BODY:
+<the full corrected article, markdown preserved>`;
+}
+
+// ─── SEO agent (CEO system) ───
+// Audits + auto-fixes the SEO-facing fields. Also checks the body has
+// scannable subheadings. Always fixes inline (no round-trip to the writer).
+export function seoAuditPrompt(input: {
+  headline: string;
+  title_meta: string;
+  meta_description: string;
+  slug: string;
+  body: string;
+}): string {
+  return `You are the SEO agent for telugulo.in (Google Discover + Search matter a lot). Audit these fields for a Telugu news article and FIX any problems directly:
+
+HEADLINE: ${input.headline}
+TITLE_META (must be <=60 chars, compelling, keyword near the front): ${input.title_meta}
+META_DESCRIPTION (must be <=160 chars, natural Telugu, includes the key fact): ${input.meta_description}
+SLUG (must be romanized lowercase, hyphens only, no Telugu script, 4-6 keyword-first words): ${input.slug}
+
+BODY (check it has 2-3 "## " subheadings and the main keyword appears early):
+${input.body}
+
+Fix TITLE_META/META_DESCRIPTION/SLUG if they violate any rule above (length, clickbait, missing keyword, bad slug format). If a field is already fine, return it unchanged.
+
+Respond in EXACTLY this format (plain text, one line each, no markdown):
+VERDICT: <one short line — what you fixed, e.g. "Shortened title_meta, fixed slug" or "OK — all fields already SEO-clean">
+TITLE_META: <final value>
+META_DESCRIPTION: <final value>
+SLUG: <final value>`;
+}
+
+// ─── CEO agent — final verdict on a completed run ───
+export function ceoVerdictPrompt(summary: {
+  title: string;
+  wordCount: number;
+  qualityNote: string;
+  seoNote: string;
+  willPublish: boolean;
+}): string {
+  return `You are the CEO of the telugulo.in AI newsroom. Your team just finished producing this article:
+
+Title: ${summary.title}
+Length: ~${summary.wordCount} words
+Quality & Humanizer agent report: ${summary.qualityNote}
+SEO agent report: ${summary.seoNote}
+Publish decision: ${summary.willPublish ? "will auto-publish now" : "saved as draft for owner review"}
+
+As CEO, write ONE short, confident sentence (Hinglish/hybrid Telugu ok) giving your final verdict on this run to the owner — like a real CEO signing off on their team's work. Be specific (mention the fixes if any), not generic.
+
+Respond with ONLY that one sentence, no preamble, no quotes.`;
+}
+
 // ─── Ads: AI ad-copy composer (image + link + keywords → polished ad) ───
 export const AD_SYSTEM = `You write short, punchy ad copy in hybrid Telugu (keep tech/brand words in English) for telugulo.in sponsored placements. Natural and catchy, never spammy or clickbait. You always reply in the exact JSON requested.`;
 

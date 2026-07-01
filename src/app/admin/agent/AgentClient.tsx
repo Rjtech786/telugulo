@@ -4,9 +4,8 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CATEGORIES } from "@/lib/site";
-import type { PipelineResult } from "@/lib/agent/pipeline";
 import { Card, Field, Toggle, inputCls, selectCls } from "../_ui";
-import { generateFromTopic, runTrendingAgent, type TopicResult } from "./actions";
+import { generateFromTopic, type TopicResult } from "./actions";
 
 const LENGTHS = [400, 600, 800, 1000, 1200, 1500];
 
@@ -23,10 +22,6 @@ export function AgentClient({ defaultLength }: { defaultLength: number }) {
   const [topicPending, startTopic] = useTransition();
   const [topicRes, setTopicRes] = useState<TopicResult | null>(null);
 
-  // ── Trending mode ──
-  const [trendPending, startTrend] = useTransition();
-  const [trendRes, setTrendRes] = useState<PipelineResult | null>(null);
-
   function genTopic() {
     setTopicRes(null);
     startTopic(async () => {
@@ -41,15 +36,6 @@ export function AgentClient({ defaultLength }: { defaultLength: number }) {
         setTopic("");
         router.refresh();
       }
-    });
-  }
-
-  function genTrending() {
-    setTrendRes(null);
-    startTrend(async () => {
-      const r = await runTrendingAgent();
-      setTrendRes(r);
-      router.refresh();
     });
   }
 
@@ -139,53 +125,6 @@ export function AgentClient({ defaultLength }: { defaultLength: number }) {
               </>
             ) : (
               <>Error: {topicRes.error}</>
-            )}
-          </div>
-        )}
-      </Card>
-
-      {/* ── Trending → article ── */}
-      <Card
-        title="Aaj ke trending se article"
-        desc="Agent khud tech/AI RSS feeds se aaj ka best topic chunkar draft likhega (jaise daily cron karta hai)."
-      >
-        <button
-          onClick={genTrending}
-          disabled={trendPending}
-          className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-ink/85 disabled:opacity-50"
-        >
-          {trendPending ? "Generating… (1–2 min)" : "⚡ Trending se generate karo"}
-        </button>
-
-        {trendRes && (
-          <div
-            className={
-              "mt-4 rounded-xl border px-4 py-3 text-sm " +
-              (trendRes.status === "error"
-                ? "border-red-200 bg-red-50 text-red-700"
-                : "border-line bg-surface text-ink-soft")
-            }
-          >
-            <div className="font-medium text-ink">
-              {trendRes.status === "created" && `✓ ${trendRes.drafts.length} draft ban gaya`}
-              {trendRes.status === "skipped" && `Skip: ${trendRes.reason}`}
-              {trendRes.status === "error" && `Error: ${trendRes.reason}`}
-            </div>
-            {trendRes.drafts.length > 0 && (
-              <ul className="mt-2 space-y-1">
-                {trendRes.drafts.map((d) => (
-                  <li key={d.id}>
-                    <Link href={`/admin/articles/${d.id}`} className="font-medium text-accent underline">
-                      {d.title}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {trendRes.log.length > 0 && (
-              <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap text-xs text-ink-mute">
-                {trendRes.log.join("\n")}
-              </pre>
             )}
           </div>
         )}

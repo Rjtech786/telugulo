@@ -18,17 +18,21 @@ import {
   selectionPrompt,
   anglePrompt,
   writingPrompt,
-  selfCheckPrompt,
+  qualityHumanizePrompt,
+  seoAuditPrompt,
+  ceoVerdictPrompt,
   revisePrompt,
   imagePrompt,
 } from "./prompts";
 import { notifyDraft } from "./telegram";
+import { createRun, logMessage, finishRun, type RunTrigger, type AgentId } from "./agentLog";
 
 export type PipelineResult = {
   status: "created" | "skipped" | "error";
   drafts: { id: string; title: string; slug: string }[];
   log: string[];
   reason?: string;
+  runId?: string;
 };
 
 /** Extract a JSON object from a model response (tolerates ``` fences / prose). */
@@ -81,6 +85,37 @@ function parseArticleFields(raw: string): ArticleFields {
   };
 }
 
+/** Parse the Quality & Humanizer agent's VERDICT + BODY output. */
+function parseQualityOutput(raw: string): { verdict: string; body: string } {
+  const s = stripFences(raw);
+  const verdictMatch = s.match(/^VERDICT:[ \t]*(.*)$/im);
+  const bodyMatch = s.match(/^BODY:[ \t]*\n?([\s\S]*)$/im);
+  return {
+    verdict: verdictMatch ? verdictMatch[1].trim() : "OK",
+    body: bodyMatch ? bodyMatch[1].trim() : "",
+  };
+}
+
+/** Parse the SEO agent's VERDICT + fixed fields output. */
+function parseSeoOutput(raw: string): {
+  verdict: string;
+  title_meta: string;
+  meta_description: string;
+  slug: string;
+} {
+  const s = stripFences(raw);
+  const field = (label: string) => {
+    const m = s.match(new RegExp(`^${label}:[ \\t]*(.*)$`, "mi"));
+    return m ? m[1].trim() : "";
+  };
+  return {
+    verdict: field("VERDICT") || "OK",
+    title_meta: field("TITLE_META"),
+    meta_description: field("META_DESCRIPTION"),
+    slug: field("SLUG"),
+  };
+}
+
 async function getDefaultAuthorId(): Promise<string> {
   const supabase = createAdminClient();
   const { data } = await supabase.from("authors").select("id").limit(1).maybeSingle();
@@ -99,18 +134,39 @@ async function getDefaultAuthorId(): Promise<string> {
 }
 
 /**
- * The daily 7-step agent (spec §4). Discovery → Selection → Research → Angle →
- * Write → Image → Self-critique → save as draft (never auto-publish).
+ * The daily agent — run by the CEO multi-agent system. A CEO orchestrator
+ * assigns work to specialist agents in order (Topic Scout → Researcher →
+ * Writer → Quality & Humanizer → SEO → Image), each reports back, and the CEO
+ * gives a final verdict before publish/save. Every assignment + report is
+ * logged to `agent_runs` / `agent_messages` (see ./agentLog) so Admin -> AI
+ * Agent can show it live (animated master/slave view).
  */
-export async function runPipeline(): Promise<PipelineResult> {
+export async function runPipeline(
+  existingRunId?: string,
+  trigger: RunTrigger = "cron",
+): Promise<PipelineResult> {
   const log: string[] = [];
   const drafts: PipelineResult["drafts"] = [];
   const supabase = createAdminClient();
+  const runId = existingRunId ?? (await createRun(trigger));
+
+  const note = (
+    agent: AgentId,
+    direction: "ceo_to_agent" | "agent_to_ceo",
+    status: "working" | "done" | "fixed" | "failed",
+    message: string,
+    detail?: string,
+  ) => {
+    log.push(`[${agent}] ${message}`);
+    return logMessage({ runId, agent, direction, status, message, detail });
+  };
 
   try {
     const features = await getFeatures();
     if (!features.article_generation) {
-      return { status: "skipped", drafts, log, reason: "Article generation is OFF" };
+      await note("ceo", "ceo_to_agent", "done", "Article generation OFF hai — is run ko skip kar raha hoon.");
+      await finishRun(runId, "skipped", { reason: "Article generation is OFF" });
+      return { status: "skipped", drafts, log, reason: "Article generation is OFF", runId };
     }
     const general = await getGeneral();
     const count = general.articles_per_day;
@@ -120,12 +176,17 @@ export async function runPipeline(): Promise<PipelineResult> {
     const qualityRules = await getQualityRules();
     const lengthWords = Math.round((qualityRules.min_words + qualityRules.max_words) / 2);
 
-    // STEP 1 — DISCOVERY
+    await note("topic_scout", "ceo_to_agent", "working", "Naya run start — Topic Scout ko trending topics dhoondne bhej raha hoon.");
+
+    // STEP 1 — TOPIC SCOUT: discovery
     const candidates = await discoverCandidates();
-    log.push(`Discovery: ${candidates.length} candidate topics from RSS`);
     if (candidates.length === 0) {
-      return { status: "skipped", drafts, log, reason: "No candidate topics found today" };
+      await note("topic_scout", "agent_to_ceo", "failed", "Aaj koi candidate topic nahi mila (RSS empty).");
+      await note("ceo", "ceo_to_agent", "done", "Topic Scout ko kuch nahi mila — aaj ke liye run band kar raha hoon.");
+      await finishRun(runId, "skipped", { reason: "No candidate topics found today" });
+      return { status: "skipped", drafts, log, reason: "No candidate topics found today", runId };
     }
+    await note("topic_scout", "agent_to_ceo", "done", `${candidates.length} candidate topics RSS se mile.`);
 
     // Recently published titles — so the editor avoids repeating a story.
     const { data: recentRows } = await supabase
@@ -135,7 +196,7 @@ export async function runPipeline(): Promise<PipelineResult> {
       .limit(30);
     const recentTitles = (recentRows ?? []).map((r) => r.title as string);
 
-    // STEP 2 — SELECTION
+    // STEP 1b — TOPIC SCOUT: selection
     const sel = await runStep("chunaav", {
       system: SYSTEM_EDITOR,
       prompt: selectionPrompt(candidates, count, recentTitles),
@@ -148,23 +209,27 @@ export async function runPipeline(): Promise<PipelineResult> {
       choices: { index: number; reason: string }[];
     }>(sel.text);
     if (selection.skip || !selection.choices?.length) {
-      return {
-        status: "skipped",
-        drafts,
-        log,
-        reason: selection.skipReason || "Editor skipped — no strong topic today",
-      };
+      const reason = selection.skipReason || "Editor skipped — no strong topic today";
+      await note("topic_scout", "agent_to_ceo", "failed", `Koi topic itna strong nahi laga: ${reason}`);
+      await note("ceo", "ceo_to_agent", "done", "Topic Scout ki salah maan kar aaj skip kar raha hoon.");
+      await finishRun(runId, "skipped", { reason });
+      return { status: "skipped", drafts, log, reason, runId };
     }
-    log.push(`Selection: chose ${selection.choices.length} topic(s)`);
+    await note(
+      "topic_scout",
+      "agent_to_ceo",
+      "done",
+      `${selection.choices.length} topic chun liya: "${candidates[selection.choices[0].index - 1]?.title ?? ""}"`,
+    );
 
     const authorId = await getDefaultAuthorId();
 
     for (const choice of selection.choices.slice(0, count)) {
       const cand = candidates[choice.index - 1];
       if (!cand) continue;
-      log.push(`→ "${cand.title}" (${cand.source})`);
 
-      // STEP 3 — RESEARCH: live web facts (Gemini grounding) + the primary source.
+      // STEP 2 — RESEARCHER: live web facts (Gemini grounding) + the primary source.
+      await note("researcher", "ceo_to_agent", "working", `Researcher ko bhej raha hoon: "${cand.title}"`);
       const primary = await fetchArticleText(
         cand.link,
         researchSettings.depth === "basic" ? 2500 : 6000,
@@ -180,21 +245,22 @@ export async function runPipeline(): Promise<PipelineResult> {
       const sources = web.sources.length
         ? web.sources
         : [{ title: cand.title, link: cand.link, source: cand.source }];
-      log.push(
-        `  Research: ${web.sources.length} web source(s), facts ${web.text.length} chars` +
-          (primary ? " + primary" : ""),
+      await note(
+        "researcher",
+        "agent_to_ceo",
+        "done",
+        `${web.sources.length} web source(s) mile, ${web.text.length} chars facts` + (primary ? " + primary source" : ""),
       );
 
-      // STEP 4 — ANGLE
+      // STEP 3 — WRITER: angle + write
+      await note("writer", "ceo_to_agent", "working", "Writer ko angle + article likhne bhej raha hoon.");
       const angle = await runStep("angle", {
         system: SYSTEM_EDITOR,
         prompt: anglePrompt(cand.title, researchText),
         maxTokens: 400,
         temperature: 0.7,
       });
-      log.push("  Angle: done");
 
-      // STEP 5 — WRITE
       const written = await runStep("writing", {
         system: SYSTEM_EDITOR,
         prompt: writingPrompt({
@@ -212,45 +278,82 @@ export async function runPipeline(): Promise<PipelineResult> {
       });
       const article = parseArticleFields(written.text);
       if (!article.headline || !article.body) {
+        await note("writer", "agent_to_ceo", "failed", "Article likhne me format error aaya.");
         throw new Error("Writing step returned an unparseable article");
       }
-      log.push(`  Write: "${article.headline}"`);
+      await note("writer", "agent_to_ceo", "done", `"${article.headline}" likh diya (~${article.body.split(/\s+/).length} words).`);
 
-      // STEP 7 (early) — SELF-CRITIQUE on the body (if enabled)
+      // STEP 4 — QUALITY & HUMANIZER (auto-fixes inline)
       let finalBody = article.body;
+      let qualityNote = "Quality check off hai (settings me disabled).";
       if (qualityRules.self_check) {
+        await note("quality", "ceo_to_agent", "working", "Quality & Humanizer ko bhej raha hoon — meaning, human-tone, aur hard Telugu check karne.");
         try {
-          const checked = await runStep("self_check", {
+          const checked = await runStep("quality_check", {
             system: SYSTEM_EDITOR,
-            prompt: selfCheckPrompt(article.body, rules, qualityRules),
+            prompt: qualityHumanizePrompt(article.body, rules, qualityRules),
             maxTokens: 4000,
             temperature: 0.4,
           });
-          const cleaned = stripFences(checked.text);
-          // Guard against a model that returns junk/too-short output.
-          if (cleaned.length > article.body.length * 0.5) {
-            finalBody = cleaned;
-            log.push("  Self-critique: cleaned");
+          const { verdict, body: fixedBody } = parseQualityOutput(checked.text);
+          qualityNote = verdict;
+          if (fixedBody.length > article.body.length * 0.5) {
+            finalBody = fixedBody;
+            await note("quality", "agent_to_ceo", "fixed", verdict);
           } else {
-            log.push("  Self-critique: kept original (output too short)");
+            await note("quality", "agent_to_ceo", "done", `${verdict} (original rakha — output bahut chhota tha)`);
           }
-        } catch {
-          log.push("  Self-critique: skipped (kept original)");
+        } catch (e) {
+          qualityNote = "Skipped (error) — original body rakha.";
+          await note("quality", "agent_to_ceo", "failed", `Error aaya, original body rakh raha hoon: ${e instanceof Error ? e.message : "unknown"}`);
         }
       }
 
-      // Slug
-      const slug = await ensureUniqueSlug(sanitizeSlug(article.slug || article.headline));
+      // Draft SEO fields (pre-fix); slug gets sanitized before the uniqueness check.
+      let titleMeta = article.title_meta;
+      let metaDescription = article.meta_description;
+      let slugCandidate = article.slug || article.headline;
 
-      // STEP 6 — IMAGE
+      // STEP 5 — SEO AGENT (auto-fixes inline)
+      await note("seo", "ceo_to_agent", "working", "SEO agent ko bhej raha hoon — title/meta/slug/headings check karne.");
+      let seoNote = "OK";
+      try {
+        const seoRes = await runStep("seo_check", {
+          system: SYSTEM_EDITOR,
+          prompt: seoAuditPrompt({
+            headline: article.headline,
+            title_meta: titleMeta,
+            meta_description: metaDescription,
+            slug: slugCandidate,
+            body: finalBody,
+          }),
+          maxTokens: 500,
+          temperature: 0.3,
+        });
+        const seo = parseSeoOutput(seoRes.text);
+        seoNote = seo.verdict;
+        if (seo.title_meta) titleMeta = seo.title_meta;
+        if (seo.meta_description) metaDescription = seo.meta_description;
+        if (seo.slug) slugCandidate = seo.slug;
+        const changed = !/^ok/i.test(seo.verdict);
+        await note("seo", "agent_to_ceo", changed ? "fixed" : "done", seo.verdict);
+      } catch (e) {
+        seoNote = "Skipped (error) — original SEO fields rakhe.";
+        await note("seo", "agent_to_ceo", "failed", `Error aaya, original SEO fields rakh raha hoon: ${e instanceof Error ? e.message : "unknown"}`);
+      }
+
+      const slug = await ensureUniqueSlug(sanitizeSlug(slugCandidate));
+
+      // STEP 6 — IMAGE AGENT
       let imageUrl: string | null = null;
       if (features.image_generation) {
+        await note("image", "ceo_to_agent", "working", "Image agent ko header image banane bhej raha hoon.");
         try {
           const img = await runImage(imagePrompt(article.headline, article.category));
           imageUrl = await uploadArticleImage(img.bytes, img.contentType, slug);
-          log.push("  Image: generated + uploaded");
+          await note("image", "agent_to_ceo", "done", "Header image ban gaya + upload ho gaya.");
         } catch (e) {
-          log.push(`  Image: failed (${e instanceof Error ? e.message : "error"})`);
+          await note("image", "agent_to_ceo", "failed", `Image generation fail hui: ${e instanceof Error ? e.message : "error"}`);
         }
       }
 
@@ -262,8 +365,8 @@ export async function runPipeline(): Promise<PipelineResult> {
         .insert({
           slug,
           title: article.headline,
-          title_meta: article.title_meta,
-          meta_description: article.meta_description,
+          title_meta: titleMeta,
+          meta_description: metaDescription,
           summary: article.summary,
           body: finalBody,
           category: (article.category || "tech").toLowerCase(),
@@ -280,6 +383,30 @@ export async function runPipeline(): Promise<PipelineResult> {
       drafts.push({ id: draft.id, title: draft.title, slug: draft.slug });
       log.push(`  Saved ${publishNow ? "+ PUBLISHED" : "draft"} ${draft.id}`);
 
+      // STEP 7 — CEO FINAL VERDICT
+      try {
+        const verdict = await runStep("ceo", {
+          system: SYSTEM_EDITOR,
+          prompt: ceoVerdictPrompt({
+            title: article.headline,
+            wordCount: finalBody.split(/\s+/).length,
+            qualityNote,
+            seoNote,
+            willPublish: publishNow,
+          }),
+          maxTokens: 150,
+          temperature: 0.6,
+        });
+        await note("ceo", "ceo_to_agent", "done", stripFences(verdict.text));
+      } catch {
+        await note(
+          "ceo",
+          "ceo_to_agent",
+          "done",
+          `Team ne kaam pura kiya — "${article.headline}" ${publishNow ? "publish ho gaya" : "draft me ready hai"}.`,
+        );
+      }
+
       // Telegram notification (non-fatal)
       if (features.telegram_notifications) {
         try {
@@ -291,10 +418,18 @@ export async function runPipeline(): Promise<PipelineResult> {
       }
     }
 
-    return { status: drafts.length ? "created" : "skipped", drafts, log };
+    const finalStatus = drafts.length ? "created" : "skipped";
+    await finishRun(runId, finalStatus, {
+      articleId: drafts[0]?.id,
+      articleTitle: drafts[0]?.title,
+    });
+    return { status: finalStatus, drafts, log, runId };
   } catch (e) {
-    log.push(`ERROR: ${e instanceof Error ? e.message : "unknown"}`);
-    return { status: "error", drafts, log, reason: e instanceof Error ? e.message : "unknown" };
+    const reason = e instanceof Error ? e.message : "unknown";
+    log.push(`ERROR: ${reason}`);
+    await note("ceo", "ceo_to_agent", "failed", `Run me error aaya: ${reason}`);
+    await finishRun(runId, "error", { reason });
+    return { status: "error", drafts, log, reason, runId };
   }
 }
 
@@ -369,14 +504,14 @@ export async function generateArticleForTopic(
   let finalBody = article.body;
   if (quality.self_check) {
     try {
-      const checked = await runStep("self_check", {
+      const checked = await runStep("quality_check", {
         system: SYSTEM_EDITOR,
-        prompt: selfCheckPrompt(article.body, rules, quality),
+        prompt: qualityHumanizePrompt(article.body, rules, quality),
         maxTokens: 4000,
         temperature: 0.4,
       });
-      const cleaned = stripFences(checked.text);
-      if (cleaned.length > article.body.length * 0.5) finalBody = cleaned;
+      const { body: fixedBody } = parseQualityOutput(checked.text);
+      if (fixedBody.length > article.body.length * 0.5) finalBody = fixedBody;
     } catch {
       // keep original
     }
