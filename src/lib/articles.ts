@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ensureUniqueSlug } from "@/lib/agent/slug";
 
 export type Article = {
   id: string;
@@ -66,13 +67,47 @@ export async function updateArticle(
   fields: Partial<
     Pick<
       Article,
-      "title" | "title_meta" | "meta_description" | "summary" | "body" | "category" | "image_url"
+      "title" | "title_meta" | "meta_description" | "summary" | "body" | "category" | "image_url" | "slug"
     >
   >,
 ) {
   const supabase = createAdminClient();
   const { error } = await supabase.from("articles").update(fields).eq("id", id);
   if (error) throw error;
+}
+
+/** True if another article already uses this slug. */
+export async function isSlugTaken(slug: string, exceptId: string): Promise<boolean> {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("articles")
+    .select("id")
+    .eq("slug", slug)
+    .neq("id", exceptId)
+    .maybeSingle();
+  return Boolean(data);
+}
+
+/** Create an empty draft (manual authoring); returns its id. */
+export async function createBlankArticle(): Promise<string> {
+  const supabase = createAdminClient();
+  const { data: author } = await supabase.from("authors").select("id").limit(1).maybeSingle();
+  const slug = await ensureUniqueSlug("new-article");
+  const { data, error } = await supabase
+    .from("articles")
+    .insert({
+      slug,
+      title: "Untitled article",
+      body: "",
+      summary: "",
+      category: "tech",
+      author_id: author?.id ?? null,
+      status: "draft",
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id as string;
 }
 
 export async function deleteArticle(id: string) {

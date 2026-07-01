@@ -34,15 +34,21 @@ const field =
 export function EditForm({ id, status, slug, imageUrl, initial }: Props) {
   const router = useRouter();
   const [f, setF] = useState(initial);
+  const [slugVal, setSlugVal] = useState(slug);
   const [pending, start] = useTransition();
-  const [status_, setStatus_] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   function save(then?: () => Promise<unknown>) {
+    setMsg(null);
     start(async () => {
-      await saveArticle(id, f);
-      if (then) await then();
-      setStatus_("Saved ✓");
-      router.refresh();
+      try {
+        await saveArticle(id, { ...f, slug: slugVal });
+        if (then) await then();
+        setMsg({ ok: true, text: "Saved ✓" });
+        router.refresh();
+      } catch (e) {
+        setMsg({ ok: false, text: e instanceof Error ? e.message : "Save failed" });
+      }
     });
   }
 
@@ -52,7 +58,7 @@ export function EditForm({ id, status, slug, imageUrl, initial }: Props) {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Edit article</h1>
           <p className="text-sm text-neutral-500">
-            /{slug} ·{" "}
+            /{slugVal} ·{" "}
             <span className={status === "published" ? "text-green-600" : "text-amber-600"}>
               {status}
             </span>
@@ -86,13 +92,31 @@ export function EditForm({ id, status, slug, imageUrl, initial }: Props) {
         </div>
       </div>
 
-      {status_ && <p className="text-xs text-green-600 dark:text-green-400">{status_}</p>}
+      {msg && (
+        <p className={"text-xs " + (msg.ok ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
+          {msg.text}
+        </p>
+      )}
 
       <FeaturedImage id={id} slug={slug} initialUrl={imageUrl} />
 
       <div className="grid gap-4">
         <Labeled label="Headline">
           <input className={field} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
+        </Labeled>
+        <Labeled label="URL slug (article ka link)">
+          <div className="flex items-center gap-1.5">
+            <span className="flex-none text-sm text-neutral-400">telugulo.in/</span>
+            <input
+              className={field}
+              value={slugVal}
+              onChange={(e) => setSlugVal(e.target.value)}
+              placeholder="my-article-url"
+            />
+          </div>
+          <span className="mt-1 block text-xs text-neutral-400">
+            Isse public URL banta hai. Change karoge to purana link 404 ho jaayega (letters, numbers, hyphens).
+          </span>
         </Labeled>
         <div className="grid gap-4 sm:grid-cols-2">
           <Labeled label="SEO title (title_meta)">

@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { publish, unpublish, remove } from "./actions";
+import { publish, unpublish, remove, createManualArticle } from "./actions";
 import { formatAdmin } from "@/lib/site";
 
 type Row = {
@@ -26,17 +26,33 @@ export function ArticlesClient({ articles }: { articles: Row[] }) {
   const drafts = articles.filter((a) => a.status === "draft");
   const published = articles.filter((a) => a.status === "published");
 
+  function newManual() {
+    start(async () => {
+      const { id } = await createManualArticle();
+      router.push(`/admin/articles/${id}`);
+    });
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Articles</h1>
-        <p className="text-sm text-neutral-500">
-          AI-written, human-reviewed drafts. New article banane ke liye{" "}
-          <Link href="/admin/agent" className="font-medium text-accent underline">
-            AI Agent
-          </Link>{" "}
-          pe jao.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Articles</h1>
+          <p className="text-sm text-neutral-500">
+            AI se banane ke liye{" "}
+            <Link href="/admin/agent" className="font-medium text-accent underline">
+              AI Agent
+            </Link>{" "}
+            pe jao — ya khud manual likho.
+          </p>
+        </div>
+        <button
+          onClick={newManual}
+          disabled={pending}
+          className="flex-none rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:opacity-50"
+        >
+          {pending ? "…" : "✍️ New (manual)"}
+        </button>
       </div>
 
       <Section title={`Drafts (${drafts.length})`}>

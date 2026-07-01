@@ -8,7 +8,10 @@ import {
   deleteArticle,
   updateArticle,
   getArticle,
+  isSlugTaken,
+  createBlankArticle,
 } from "@/lib/articles";
+import { sanitizeSlug } from "@/lib/agent/slug";
 import { runPipeline, type PipelineResult } from "@/lib/agent/pipeline";
 import { uploadArticleImage } from "@/lib/storage";
 import { runImage } from "@/lib/ai";
@@ -19,6 +22,14 @@ export async function generateNow(): Promise<PipelineResult> {
   const result = await runPipeline();
   revalidatePath("/admin/articles");
   return result;
+}
+
+/** Create a blank draft to author manually; returns its id (for redirect). */
+export async function createManualArticle(): Promise<{ id: string }> {
+  await requireAdmin();
+  const id = await createBlankArticle();
+  revalidatePath("/admin/articles");
+  return { id };
 }
 
 export async function publish(id: string) {
@@ -50,13 +61,35 @@ export async function saveArticle(
     summary: string;
     body: string;
     category: string;
+    slug?: string;
   },
 ) {
   await requireAdmin();
-  await updateArticle(id, fields);
+
+  const { slug: rawSlug, ...rest } = fields;
+  const update: Parameters<typeof updateArticle>[1] = { ...rest };
+
+  // Optional slug (URL) change — validate + ensure uniqueness.
+  let newSlug: string | undefined;
+  if (rawSlug != null) {
+    const clean = sanitizeSlug(rawSlug);
+    if (!clean) throw new Error("Enter a valid URL slug (letters, numbers, hyphens).");
+    const current = await getArticle(id);
+    if (current && clean !== current.slug) {
+      if (await isSlugTaken(clean, id)) {
+        throw new Error(`URL "/${clean}" is already used by another article.`);
+      }
+      update.slug = clean;
+      newSlug = clean;
+    }
+  }
+
+  await updateArticle(id, update);
   revalidatePath("/admin/articles");
   revalidatePath(`/admin/articles/${id}`);
-  return { ok: true };
+  revalidatePath("/");
+  if (newSlug) revalidatePath(`/${newSlug}`);
+  return { ok: true, slug: newSlug };
 }
 
 // ─── Featured image ───
