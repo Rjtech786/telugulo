@@ -29,9 +29,9 @@ Built with Next.js 16. Replaces the old WordPress site.
 
 ## 4. Supabase (dedicated project — NOT the ApnaBot one)
 - **Project id:** `ofusghtmlbhikrohtskm` · URL `https://ofusghtmlbhikrohtskm.supabase.co` · region ap-south-1
-- **Tables:** `articles`, `authors`, `settings`, `api_keys` (AES-256-GCM encrypted), `ads` (+ keywords/headline/description/cta), `performance_insights`, `page_views` (timestamped traffic analytics), `skill_notes` (agent self-learning), `mcp_action_log` (MCP audit)
-- **Storage bucket:** `article-images` (public; ad/featured/body uploads go here too)
-- **Migrations:** `supabase/migrations/` (0001 schema, 0002 view-counter, 0003 ad counters, 0004 page_views + `daily_view_counts`/`top_articles_since` RPCs, 0005 ads AI/keywords, 0006 skill_notes + mcp_action_log)
+- **Tables:** `articles`, `authors`, `settings`, `api_keys` (AES-256-GCM encrypted), `ads` (+ keywords/headline/description/cta), `performance_insights`, `page_views` (timestamped traffic analytics), `skill_notes` (agent self-learning), `mcp_action_log` (MCP audit), `agent_runs` + `agent_messages` (CEO system log), `pages` (footer/legal pages, admin-only RLS)
+- **Storage bucket:** `article-images` (public; ad/featured/body/author-avatar uploads go here too)
+- **Migrations:** `supabase/migrations/` (0001 schema, 0002 view-counter, 0003 ad counters, 0004 page_views + `daily_view_counts`/`top_articles_since` RPCs, 0005 ads AI/keywords, 0006 skill_notes + mcp_action_log, 0007 CEO agent system, 0008 `pages` table + English seed content)
 - RLS on: only published articles / authors / active ads are public; rest is server-only (service role)
 
 ## 5. Key code structure
@@ -43,7 +43,8 @@ src/
     admin/             dashboard: AdminShell (sidebar), page (overview w/ traffic chart),
                        agent (AI Agent: topic/trending generation), articles, site
                        (Site Settings), settings (AI), credentials, integrations,
-                       analytics, ads, articles/[id] (editor: body/meta/image +
+                       analytics, ads, pages (footer/legal pages CRUD), authors
+                       (name/slug/bio/avatar CRUD), articles/[id] (editor: body/meta/image +
                        editable URL slug; "New (manual)" creates a blank draft), _ui.tsx (shared)
     mcp/route.ts       MCP control server (token-in-URL JSON-RPC, 20 tools)
     api/cron/generate  daily trigger (POST, Bearer CRON_SECRET)
@@ -63,7 +64,8 @@ src/
     supabase/          client.ts, server.ts, admin.ts (service role)
     settings.ts (+ getSiteSettings/getAgentInstructions/getResearch/getQuality),
     analytics.ts (traffic rollups, IST), sitemap.ts (XML builders),
-    api-keys.ts, articles.ts (+ listRelated), public.ts, config.ts, site.ts, ads.ts, auth.ts
+    api-keys.ts, articles.ts (+ listRelated), public.ts, config.ts, site.ts, ads.ts, auth.ts,
+    pages.ts (footer/legal pages CRUD), authors.ts (author CRUD)
   components/          rich-editor (TipTap), article-card, article-body, site-header/footer,
                        social-links, ad-slot, icons, thumb, site-head
 ```
@@ -151,6 +153,27 @@ Owner controls the blog from Claude (Settings → Connectors → custom connecto
   Note: `lib/insights.ts generateWeeklyInsights()` (Admin → Analytics manual
   "run now" report → `performance_insights` table) is a separate, older,
   human-facing feature — left untouched.
+
+## 6d. Pages CMS + Authors admin — LIVE
+- **Pages (`Admin → Pages`):** the footer/legal pages (About, Contact, Privacy,
+  Terms, Disclaimer, Editorial Policy) are now rows in the `pages` table
+  (slug/title/content-Markdown), not hardcoded TSX. Content is now in
+  **English** (was hybrid Telugu). Admin can **edit** (title + Markdown body)
+  and **delete** each page; slug is fixed (tied to the real route) so it can't
+  be broken from the UI. Public routes (`app/(site)/{about,contact,privacy,
+  terms,disclaimer,editorial-policy}/page.tsx`) fetch by slug via
+  `lib/pages.ts` and render with the shared `<StaticPageView>` component
+  (reuses `ArticleBody` for Markdown). The footer nav (`site-footer.tsx`) and
+  `/page-sitemap.xml` now both read the live `pages` list instead of the old
+  hardcoded `FOOTER_PAGES` const (removed) — delete a page and its footer
+  link + sitemap entry disappear automatically; the route itself 404s.
+- **Authors (`Admin → Authors`):** full CRUD (`lib/authors.ts`) — name, URL
+  slug, bio, and **avatar photo** (upload to Storage or paste a URL) are all
+  editable. The avatar now actually renders on the public site (article
+  byline + `/author/[slug]` header) instead of only the static "తె" badge,
+  which is now just the no-avatar fallback.
+- Migration: `0008_pages.sql` (table + RLS + `touch_updated_at` trigger +
+  English seed content for all 6 pages) — applied to the live project.
 
 ## 7. Current settings (Supabase `settings` table, key/jsonb)
 - `ai_models`: per-step provider+model. ⚠️ **Writing currently = `openai/gpt-4o-mini`** (cheapest) —
@@ -254,7 +277,11 @@ links to related past articles; visible "Sources" block on article pages;
 every CEO pipeline step retries once on a different AI provider before
 failing the run; **Performance agent** wired up — reads `page_views` traffic
 on a weekly/monthly cadence and feeds actionable patterns into `skill_notes`
-automatically (`ADVANCED_ROADMAP.md` written the same day to track the rest).
+automatically (`ADVANCED_ROADMAP.md` written the same day to track the rest)
+→ **Pages CMS + Authors admin**: footer/legal pages moved from hardcoded TSX
+to a DB-driven `pages` table (English content, edit/delete in Admin → Pages,
+dynamic footer nav + sitemap); new Admin → Authors CRUD (name/slug/bio/avatar
+photo, upload or URL) with the avatar now actually shown on the public site.
 
 ---
 *Update this file as the project changes so a fresh session stays in sync.*

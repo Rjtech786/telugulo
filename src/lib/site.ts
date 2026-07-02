@@ -29,15 +29,8 @@ export function categoryLabel(slug: string | null): string {
 
 // Social links are now configured in Admin → Site Settings (DB-driven) and
 // rendered via the SocialLinks component. See lib/settings.ts getSiteSettings().
-
-export const FOOTER_PAGES: { href: string; label: string }[] = [
-  { href: "/about", label: "About" },
-  { href: "/contact", label: "Contact" },
-  { href: "/privacy", label: "Privacy Policy" },
-  { href: "/disclaimer", label: "Disclaimer" },
-  { href: "/terms", label: "Terms" },
-  { href: "/editorial-policy", label: "Editorial Policy" },
-];
+// Footer/legal pages (About, Contact, Privacy, ...) are now DB-driven too —
+// see lib/pages.ts and Admin → Pages.
 
 // Colourful gradient placeholders for articles without a featured image
 // (matches the UI mock). Deterministic per seed so a card keeps its colour.

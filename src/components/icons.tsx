@@ -37,6 +37,24 @@ export function IconArticles(p: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function IconPage(p: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...p}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+    </Svg>
+  );
+}
+
+export function IconUser(p: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...p}>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21c0-4 3.5-7 8-7s8 3 8 7" />
+    </Svg>
+  );
+}
+
 export function IconSettings(p: SVGProps<SVGSVGElement>) {
   return (
     <Svg {...p}>

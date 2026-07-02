@@ -130,9 +130,18 @@ export default async function ArticlePage({
       </h1>
 
       <div className="mt-4 flex items-center gap-3 border-b border-line pb-5 text-[13px] text-ink-soft">
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-white">
-          తె
-        </span>
+        {author?.avatar ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={author.avatar}
+            alt={author.name}
+            className="h-9 w-9 flex-none rounded-full object-cover"
+          />
+        ) : (
+          <span className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-accent text-sm font-semibold text-white">
+            తె
+          </span>
+        )}
         <span>
           <span className="block font-medium text-ink">
             {author?.slug ? (

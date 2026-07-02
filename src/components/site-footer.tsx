@@ -1,15 +1,27 @@
 import Link from "next/link";
-import { FOOTER_PAGES } from "@/lib/site";
 import { SocialLinks, type Social } from "@/components/social-links";
+
+// Preferred display order for the footer nav; anything else (e.g. a new page
+// added in Admin -> Pages) is appended alphabetically after these.
+const FOOTER_ORDER = ["about", "contact", "privacy", "disclaimer", "terms", "editorial-policy"];
+function orderPages<T extends { slug: string }>(pages: T[]): T[] {
+  return [...pages].sort((a, b) => {
+    const ia = FOOTER_ORDER.indexOf(a.slug);
+    const ib = FOOTER_ORDER.indexOf(b.slug);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
+}
 
 export function SiteFooter({
   name,
   about,
   socials,
+  pages,
 }: {
   name: string;
   about: string;
   socials: Social[];
+  pages: { slug: string; title: string }[];
 }) {
   return (
     <footer className="mt-12 border-t border-line bg-lav">
@@ -26,9 +38,9 @@ export function SiteFooter({
             {about}
           </p>
           <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-[13px] font-medium text-ink-soft">
-            {FOOTER_PAGES.map((p) => (
-              <Link key={p.href} href={p.href} className="hover:text-accent">
-                {p.label}
+            {orderPages(pages).map((p) => (
+              <Link key={p.slug} href={`/${p.slug}`} className="hover:text-accent">
+                {p.title}
               </Link>
             ))}
             <Link href="/feed.xml" className="hover:text-accent">

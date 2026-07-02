@@ -41,9 +41,23 @@ export default async function AuthorPage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight">{author.name}</h1>
-        {author.bio && <p className="text-neutral-500">{author.bio}</p>}
+      <header className="flex items-center gap-4">
+        {author.avatar ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={author.avatar}
+            alt={author.name}
+            className="h-16 w-16 flex-none rounded-full object-cover"
+          />
+        ) : (
+          <span className="flex h-16 w-16 flex-none items-center justify-center rounded-full bg-accent text-xl font-semibold text-white">
+            {author.name.charAt(0).toUpperCase()}
+          </span>
+        )}
+        <div className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight">{author.name}</h1>
+          {author.bio && <p className="text-neutral-500">{author.bio}</p>}
+        </div>
       </header>
       <div className="grid gap-3">
         {articles.map((a) => (
