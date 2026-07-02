@@ -63,6 +63,31 @@ export function AdsClient({ ads }: { ads: Ad[] }) {
     });
   }
 
+  function toggle(ad: Ad) {
+    setErr(null);
+    start(async () => {
+      try {
+        await toggleAd(ad.id, !ad.active);
+        router.refresh();
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Toggle failed — try again");
+      }
+    });
+  }
+
+  function remove(id: string) {
+    if (!confirm("Delete ad?")) return;
+    setErr(null);
+    start(async () => {
+      try {
+        await removeAd(id);
+        router.refresh();
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Delete failed — try again");
+      }
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -72,6 +97,12 @@ export function AdsClient({ ads }: { ads: Ad[] }) {
           articles me dikhega jinke content se keywords match/relate hote hain.
         </p>
       </div>
+
+      {err && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-600">
+          {err}
+        </p>
+      )}
 
       <Card title="Create an ad" desc="Keywords matter most — ad sirf matching/related posts me dikhega.">
         <div className="grid gap-4 sm:grid-cols-2">
@@ -139,8 +170,6 @@ export function AdsClient({ ads }: { ads: Ad[] }) {
           )}
         </div>
 
-        {err && <p className="mt-3 text-sm font-medium text-red-600">{err}</p>}
-
         <button
           onClick={submit}
           disabled={pending || !form.link.trim()}
@@ -182,7 +211,7 @@ export function AdsClient({ ads }: { ads: Ad[] }) {
                   </div>
                   <div className="flex flex-none flex-col gap-2">
                     <button
-                      onClick={() => start(async () => { await toggleAd(ad.id, !ad.active); router.refresh(); })}
+                      onClick={() => toggle(ad)}
                       disabled={pending}
                       className={
                         "rounded-lg px-3 py-1.5 text-sm font-semibold transition disabled:opacity-50 " +
@@ -192,7 +221,7 @@ export function AdsClient({ ads }: { ads: Ad[] }) {
                       {ad.active ? "Active" : "Inactive"}
                     </button>
                     <button
-                      onClick={() => start(async () => { if (confirm("Delete ad?")) { await removeAd(ad.id); router.refresh(); } })}
+                      onClick={() => remove(ad.id)}
                       disabled={pending}
                       className="rounded-lg px-3 py-1.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
                     >
