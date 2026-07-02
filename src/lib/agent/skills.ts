@@ -9,12 +9,12 @@ export type SkillNote = {
   created_at: string;
 };
 
-/** Add a reusable skill note to the agent's learning memory. */
-export async function addSkillNote(problemType: string, solutionNote: string) {
+/** Add a reusable skill note ('all' = every agent, else scoped to one agent). */
+export async function addSkillNote(problemType: string, solutionNote: string, agentKey = "all") {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("skill_notes")
-    .insert({ problem_type: problemType.trim(), solution_note: solutionNote.trim() })
+    .insert({ problem_type: problemType.trim(), solution_note: solutionNote.trim(), agent_key: agentKey })
     .select("id")
     .single();
   if (error) throw error;

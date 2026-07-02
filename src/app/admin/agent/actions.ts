@@ -16,6 +16,56 @@ import {
   type AgentRun,
   type AgentMessage,
 } from "@/lib/agent/agentLog";
+import { getRecentPipelineRuns, type PipelineRunRow } from "@/lib/agent/pipelineRuns";
+import {
+  listAgentConfigs,
+  updateAgentConfig,
+  isAgentKey,
+  type AgentConfig,
+} from "@/lib/agent/agentConfigs";
+import { getGeneral, writeSetting } from "@/lib/settings";
+import { SETTINGS_KEYS, type ModelTier } from "@/lib/config";
+
+/** V3 mission-control panel data: agent configs + structured runs + gate flag. */
+export async function getV3Panel(): Promise<{
+  configs: AgentConfig[];
+  pipelineRuns: PipelineRunRow[];
+  autoPublish: boolean;
+}> {
+  await requireAdmin();
+  const [configs, pipelineRuns, general] = await Promise.all([
+    listAgentConfigs().catch(() => []),
+    getRecentPipelineRuns(10).catch(() => []),
+    getGeneral(),
+  ]);
+  return { configs, pipelineRuns, autoPublish: general.auto_publish };
+}
+
+/** Save one agent's instructions / tier / enabled from the side panel. */
+export async function saveAgentConfigAction(
+  agentKey: string,
+  fields: { instructions?: string; model_tier?: string; enabled?: boolean },
+): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  if (!isAgentKey(agentKey)) throw new Error("Unknown agent");
+  const patch: { instructions?: string; model_tier?: ModelTier; enabled?: boolean } = {};
+  if (fields.instructions !== undefined) patch.instructions = fields.instructions;
+  if (fields.enabled !== undefined) patch.enabled = fields.enabled;
+  if (fields.model_tier !== undefined) {
+    if (!["cheap", "mid", "best"].includes(fields.model_tier)) throw new Error("Bad tier");
+    patch.model_tier = fields.model_tier as ModelTier;
+  }
+  await updateAgentConfig(agentKey, patch);
+  return { ok: true };
+}
+
+/** Global publish-gate pause (spec §6): auto-publish ON/OFF. */
+export async function setAutoPublish(on: boolean): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  const general = await getGeneral();
+  await writeSetting(SETTINGS_KEYS.general, { ...general, auto_publish: on });
+  return { ok: true };
+}
 
 export type TopicResult =
   | { ok: true; id: string; title: string; slug: string }

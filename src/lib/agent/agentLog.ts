@@ -15,7 +15,12 @@ export type AgentId =
   | "writer"
   | "quality"
   | "seo"
-  | "image";
+  | "image"
+  // V3 Verify Mode agents
+  | "fact_checker"
+  | "language_editor"
+  | "discover_checker"
+  | "fixer";
 
 export type MsgDirection = "ceo_to_agent" | "agent_to_ceo";
 export type MsgStatus = "working" | "done" | "fixed" | "failed";

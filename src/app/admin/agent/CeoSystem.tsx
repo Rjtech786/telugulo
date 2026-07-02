@@ -7,7 +7,12 @@ import {
   startCeoRun,
   getCeoRunStatus,
   getCeoOverview,
+  getV3Panel,
+  saveAgentConfigAction,
+  setAutoPublish,
 } from "./actions";
+import type { PipelineRunRow } from "@/lib/agent/pipelineRuns";
+import type { AgentConfig } from "@/lib/agent/agentConfigs";
 
 type AgentRun = {
   id: string;
@@ -23,7 +28,18 @@ type AgentRun = {
 type AgentMessage = {
   id: string;
   run_id: string;
-  agent: "ceo" | "topic_scout" | "researcher" | "writer" | "quality" | "seo" | "image";
+  agent:
+    | "ceo"
+    | "topic_scout"
+    | "researcher"
+    | "writer"
+    | "quality"
+    | "seo"
+    | "image"
+    | "fact_checker"
+    | "language_editor"
+    | "discover_checker"
+    | "fixer";
   direction: "ceo_to_agent" | "agent_to_ceo";
   status: "working" | "done" | "fixed" | "failed";
   message: string;
@@ -35,12 +51,18 @@ const AGENT_META: Record<
   Exclude<AgentMessage["agent"], "ceo">,
   { label: string; icon: string; x: number; y: number }
 > = {
+  // inner ring — pipeline agents
   topic_scout: { label: "Topic Scout", icon: "🔍", x: 350, y: 66 },
   researcher: { label: "Researcher", icon: "📚", x: 508, y: 158 },
   writer: { label: "Writer", icon: "✍️", x: 508, y: 342 },
   quality: { label: "Quality & Humanizer", icon: "🧹", x: 350, y: 434 },
-  seo: { label: "SEO Agent", icon: "📈", x: 192, y: 342 },
+  seo: { label: "Verify Mode", icon: "🛡️", x: 192, y: 342 },
   image: { label: "Image Agent", icon: "🖼️", x: 192, y: 158 },
+  // outer "Verify ring" — V3 reviewer agents
+  fact_checker: { label: "Fact Checker", icon: "🔎", x: 636, y: 84 },
+  language_editor: { label: "Language Editor", icon: "🔤", x: 636, y: 416 },
+  discover_checker: { label: "Discover Checker", icon: "🧭", x: 64, y: 416 },
+  fixer: { label: "Fixer", icon: "🔧", x: 64, y: 84 },
 };
 const AGENT_IDS = Object.keys(AGENT_META) as (keyof typeof AGENT_META)[];
 const CEO_POS = { x: 350, y: 250 };
@@ -115,6 +137,28 @@ export function CeoSystem() {
   const seenCount = useRef(0);
   const liveRunId = useRef<string | null>(null);
 
+  // V3 mission-control panel state
+  const [v3, setV3] = useState<{
+    configs: AgentConfig[];
+    pipelineRuns: PipelineRunRow[];
+    autoPublish: boolean;
+  } | null>(null);
+  const [selAgent, setSelAgent] = useState("");
+  const [cfgDraft, setCfgDraft] = useState({ instructions: "", model_tier: "mid", enabled: true });
+  const [cfgSaving, setCfgSaving] = useState(false);
+  const [cfgMsg, setCfgMsg] = useState<string | null>(null);
+
+  const loadV3 = useCallback(async () => {
+    try {
+      setV3(await getV3Panel());
+    } catch {
+      /* migration not applied yet */
+    }
+  }, []);
+  useEffect(() => {
+    loadV3();
+  }, [loadV3]);
+
   const applyMessages = useCallback((msgs: AgentMessage[]) => {
     const fresh = msgs.slice(seenCount.current);
     if (fresh.length) {
@@ -167,6 +211,7 @@ export function CeoSystem() {
           liveRunId.current = null;
           const ov = await getCeoOverview();
           setRecent(ov.recent);
+          loadV3();
         }
       } else {
         // idle — occasionally check if a new run started (e.g. the 8 AM cron)
@@ -372,6 +417,169 @@ export function CeoSystem() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* ─── V3 Verify pipeline (mission control) ─── */}
+      {v3 && (
+        <div className="mt-6 space-y-5">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-ink">Verify pipeline (V3)</h3>
+            <button
+              onClick={async () => {
+                const next = !v3.autoPublish;
+                setV3({ ...v3, autoPublish: next });
+                await setAutoPublish(next);
+              }}
+              className={
+                "rounded-lg px-3 py-1.5 text-sm font-semibold transition " +
+                (v3.autoPublish
+                  ? "bg-green-600 text-white hover:bg-green-700"
+                  : "border border-line text-ink-soft hover:bg-surface")
+              }
+            >
+              Auto-publish: {v3.autoPublish ? "ON" : "OFF (sab draft rahenge)"}
+            </button>
+          </div>
+
+          {/* pipeline_runs with scores + loops + failure report */}
+          {v3.pipelineRuns.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-line">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-surface text-xs text-ink-mute">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Kab</th>
+                    <th className="px-3 py-2 font-medium">Result</th>
+                    <th className="px-3 py-2 font-medium">Score</th>
+                    <th className="px-3 py-2 font-medium">Loops</th>
+                    <th className="px-3 py-2 font-medium">Report</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {v3.pipelineRuns.map((r) => {
+                    const s = r.reviewer_scores;
+                    const avg = s ? (((s.fact ?? 0) + (s.language ?? 0) + (s.discover ?? 0)) / 3).toFixed(1) : "—";
+                    const badge =
+                      r.final_status === "published"
+                        ? "bg-green-50 text-green-700"
+                        : r.final_status === "draft_failed" || r.final_status === "error"
+                          ? "bg-red-50 text-red-700"
+                          : "bg-amber-50 text-amber-700";
+                    return (
+                      <tr key={r.id} className="border-t border-line align-top">
+                        <td className="px-3 py-2 text-ink-soft">{timeAgo(r.created_at)}</td>
+                        <td className="px-3 py-2">
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${badge}`}>
+                            {r.final_status === "draft_failed" ? "Draft (failed verify)" : (r.final_status ?? "running")}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 tabular-nums text-ink">{avg}</td>
+                        <td className="px-3 py-2 tabular-nums text-ink-soft">{s?.loops ?? "—"}</td>
+                        <td className="px-3 py-2">
+                          {r.failure_report ? (
+                            <details className="max-w-md text-xs">
+                              <summary className="cursor-pointer font-medium text-accent">dekho</summary>
+                              <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-surface p-2 text-[11px] text-ink-soft">
+                                {JSON.stringify(r.failure_report, null, 2)}
+                              </pre>
+                            </details>
+                          ) : (
+                            <span className="text-ink-mute">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* per-agent config editor */}
+          {v3.configs.length > 0 && (
+            <div className="rounded-xl border border-line bg-white p-4">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-ink">Agent instructions</span>
+                <select
+                  value={selAgent}
+                  onChange={(e) => {
+                    const key = e.target.value;
+                    setSelAgent(key);
+                    setCfgMsg(null);
+                    const c = v3.configs.find((x) => x.agent_key === key);
+                    if (c) {
+                      setCfgDraft({
+                        instructions: c.instructions ?? "",
+                        model_tier: c.model_tier ?? "mid",
+                        enabled: c.enabled,
+                      });
+                    }
+                  }}
+                  className="rounded-lg border border-line bg-white px-2.5 py-1.5 text-sm"
+                >
+                  <option value="">— agent chuno —</option>
+                  {v3.configs.map((c) => (
+                    <option key={c.agent_key} value={c.agent_key}>
+                      {c.display_name ?? c.agent_key} {c.enabled ? "" : "(OFF)"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {selAgent && (
+                <div className="space-y-3">
+                  <textarea
+                    rows={5}
+                    value={cfgDraft.instructions}
+                    onChange={(e) => setCfgDraft({ ...cfgDraft, instructions: e.target.value })}
+                    className="w-full rounded-lg border border-line px-3 py-2 text-sm"
+                    placeholder="Is agent ki apni instructions (shared newsroom rules ke upar layer)…"
+                  />
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="flex items-center gap-2 text-sm text-ink-soft">
+                      Model tier:
+                      <select
+                        value={cfgDraft.model_tier}
+                        onChange={(e) => setCfgDraft({ ...cfgDraft, model_tier: e.target.value })}
+                        className="rounded-lg border border-line bg-white px-2 py-1 text-sm"
+                      >
+                        <option value="cheap">cheap</option>
+                        <option value="mid">mid</option>
+                        <option value="best">best</option>
+                      </select>
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-ink-soft">
+                      <input
+                        type="checkbox"
+                        checked={cfgDraft.enabled}
+                        onChange={(e) => setCfgDraft({ ...cfgDraft, enabled: e.target.checked })}
+                      />
+                      Enabled
+                    </label>
+                    <button
+                      onClick={async () => {
+                        setCfgSaving(true);
+                        setCfgMsg(null);
+                        try {
+                          await saveAgentConfigAction(selAgent, cfgDraft);
+                          setCfgMsg("Saved ✓ — agle run se lagoo");
+                          loadV3();
+                        } catch (e) {
+                          setCfgMsg(e instanceof Error ? e.message : "Save failed");
+                        } finally {
+                          setCfgSaving(false);
+                        }
+                      }}
+                      disabled={cfgSaving}
+                      className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-accent-dark disabled:opacity-50"
+                    >
+                      {cfgSaving ? "Saving…" : "Save"}
+                    </button>
+                    {cfgMsg && <span className="text-xs font-medium text-green-600">{cfgMsg}</span>}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </Card>

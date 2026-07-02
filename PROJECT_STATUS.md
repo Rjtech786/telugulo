@@ -31,7 +31,7 @@ Built with Next.js 16. Replaces the old WordPress site.
 - **Project id:** `ofusghtmlbhikrohtskm` · URL `https://ofusghtmlbhikrohtskm.supabase.co` · region ap-south-1
 - **Tables:** `articles`, `authors`, `settings`, `api_keys` (AES-256-GCM encrypted), `ads` (+ keywords/headline/description/cta), `performance_insights`, `page_views` (timestamped traffic analytics), `skill_notes` (agent self-learning), `mcp_action_log` (MCP audit), `agent_runs` + `agent_messages` (CEO system log), `pages` (footer/legal pages, admin-only RLS)
 - **Storage bucket:** `article-images` (public; ad/featured/body/author-avatar uploads go here too)
-- **Migrations:** `supabase/migrations/` (0001 schema, 0002 view-counter, 0003 ad counters, 0004 page_views + `daily_view_counts`/`top_articles_since` RPCs, 0005 ads AI/keywords, 0006 skill_notes + mcp_action_log, 0007 CEO agent system, 0008 `pages` table + English seed content)
+- **Migrations:** `supabase/migrations/` (0001 schema, 0002 view-counter, 0003 ad counters, 0004 page_views + `daily_view_counts`/`top_articles_since` RPCs, 0005 ads AI/keywords, 0006 skill_notes + mcp_action_log, 0007 CEO agent system, 0008 `pages` table + English seed content, 0009 **Newsroom V3**: pg_trgm + `pipeline_runs` + `banned_phrases` + `agent_configs` + `skill_notes.agent_key` + `similar_published_titles` RPC)
 - RLS on: only published articles / authors / active ads are public; rest is server-only (service role)
 
 ## 5. Key code structure
@@ -175,6 +175,66 @@ Owner controls the blog from Claude (Settings → Connectors → custom connecto
 - Migration: `0008_pages.sql` (table + RLS + `touch_updated_at` trigger +
   English seed content for all 6 pages) — applied to the live project.
 
+## 6e. NEWSROOM V3 "Verify Mode" (NEWSROOM_V3_SPEC.md) — BUILT 2026-07-02
+The daily pipeline (`runPipeline`) is now the self-correcting V3 newsroom.
+**Golden rule: an article publishes ONLY if (a) hard code validators pass AND
+(b) Verify Mode passed with avg score ≥ 8; else it stays a draft with a
+failure report.** On-demand `generateArticleForTopic` (MCP write/test) is
+unchanged (always draft).
+- **Stage 1 — Topic Scout + Dup Guard:** LLM niche filter (tech/AI only →
+  `skipped_off_niche`); duplicate guard = pg_trgm `similar_published_titles`
+  RPC (>0.45) + LLM semantic check vs 20 recent titles (→
+  `skipped_duplicate`). Walks ranked choices until one passes.
+- **Stage 2 — Researcher:** `lib/agent/factsTable.ts buildFactsTable()` —
+  Gemini grounding + primary source → redirect URLs resolved server-side
+  (vertexaisearch/news.google → real publisher URL; unresolvable = dropped)
+  → strict facts-table JSON (facts/quotes/sources/india_angle). Stored in
+  `pipeline_runs.facts_table`.
+- **Stage 3 — Writer:** `writerV3Prompt` — outline-first with per-section word
+  budgets, facts-table-only, ending_sentence generated first (must contain
+  digit/proper noun), zero internal links, `flag_short` escape hatch.
+  **max_tokens 8000** (Telugu ≈ 5-6x tokens/word — 2000 truncated at ~450
+  words). Code-side word-count enforcement: <min_words → Fixer expands with
+  UNUSED facts, max 2 attempts. Quality & Humanizer still runs after.
+- **Stage 4 — Verify Mode** (`lib/agent/verify.ts`): Fact Checker + Language
+  Editor + Discover Checker run in PARALLEL (strict JSON, temp 0), Fixer
+  applies all issues in a full-flow rewrite, re-check, **max 3 loops**.
+  Language Editor reads + extends the self-learning `banned_phrases` table.
+  Discover Checker picks 0-2 internal links from same-category published
+  candidates; code inserts them only if the anchor text exists in the body.
+- **Stage 5 — Publish Gate:** article saved as DRAFT first, then hard
+  validators (`lib/agent/validators.ts`, pure code): script purity (Telugu+
+  Latin only — Arabic/Devanagari/etc. = fail), word count, slug format+typo
+  (edit-distance-1 vs dictionary, catches "apdate"), sources present + no
+  redirect-blacklist URLs, duplicate re-check (>0.6), internal links resolve,
+  image ≥1200px (PNG/JPEG/WebP header parse) + Telugu alt, concrete ending.
+  Publish only if validators + verify + `general.auto_publish` all pass; else
+  draft + `failure_report` + WhatsApp notify (`lib/agent/notify.ts`, envs
+  `WHATSAPP_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID`/`WHATSAPP_ADMIN_NUMBER`,
+  Telegram fallback). Best-effort IndexNow ping (env `INDEXNOW_KEY` +
+  `/indexnow-key.txt` route).
+- **Per-agent configs (spec §11.5):** `agent_configs` table (10 agents:
+  instructions/model_tier cheap|mid|best/enabled) + `skill_notes.agent_key`
+  scoping. Prompt assembly: shared rules → agent instructions → scoped notes
+  (`lib/agent/agentConfigs.ts`). Editable via admin panel AND 5 new MCP tools:
+  `telugulo_list_agents`, `get_agent_config`, `update_agent_config[confirm]`,
+  `toggle_agent`, `set_agent_model`; `add_skill_note` now takes `agent_key`.
+  MCP `structuredContent` schema bug (arrays) fixed in `app/mcp/route.ts`.
+- **Logging:** every run → `pipeline_runs` row (stage_logs with ms/word_count/
+  output_tokens, facts_table, reviewer_scores+loops, hard_validator_results,
+  final_status, failure_report). `agent_runs`/`agent_messages` still power the
+  live animation.
+- **Admin → AI Agent:** diagram now has a Verify ring (Fact Checker/Language
+  Editor/Discover Checker/Fixer nodes), V3 runs table (Score avg, Loops,
+  expandable failure report), global Auto-publish ON/OFF toggle, and a
+  per-agent instructions/tier/enabled editor.
+- ⚠️ New pipeline model steps (Admin → AI Settings): `niche_filter`,
+  `dup_check`, `facts_extract`, `fact_check`, `language_edit`,
+  `discover_check`, `fixer`.
+- ⚠️ Spec §12 Phase 5 (regression dry-runs on the 10 known failures + 3 days
+  of verify-without-publish) is an OPERATIONAL step still to do — flip
+  Auto-publish OFF in Admin → AI Agent during tuning if desired.
+
 ## 7. Current settings (Supabase `settings` table, key/jsonb)
 - `ai_models`: per-step provider+model. ⚠️ **Writing currently = `openai/gpt-4o-mini`** (cheapest) —
   a quality lever; bump to gpt-4.1 or gemini-2.5-pro via Admin → AI Settings or MCP `update_model`.
@@ -281,7 +341,12 @@ automatically (`ADVANCED_ROADMAP.md` written the same day to track the rest)
 → **Pages CMS + Authors admin**: footer/legal pages moved from hardcoded TSX
 to a DB-driven `pages` table (English content, edit/delete in Admin → Pages,
 dynamic footer nav + sitemap); new Admin → Authors CRUD (name/slug/bio/avatar
-photo, upload or URL) with the avatar now actually shown on the public site.
+photo, upload or URL) with the avatar now actually shown on the public site
+→ **NEWSROOM V3 "Verify Mode"** (see §6e): self-correcting pipeline — niche
+filter + duplicate guard, facts-table researcher with redirect resolution,
+outline-first writer (max_tokens 8000 fix), 3 parallel reviewer agents +
+Fixer loop (max 3), hard code validators as the publish gate, per-agent
+configs + 5 new MCP tools, WhatsApp failure alerts, admin Verify-ring UI.
 
 ---
 *Update this file as the project changes so a fresh session stays in sync.*

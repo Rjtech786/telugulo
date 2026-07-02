@@ -34,6 +34,14 @@ import {
 } from "@/lib/settings";
 import { addSkillNote, listSkillNotes } from "@/lib/agent/skills";
 import {
+  listAgentConfigs,
+  getAgentConfig,
+  updateAgentConfig,
+  getAgentSkillNotes,
+  isAgentKey,
+} from "@/lib/agent/agentConfigs";
+import { AGENT_KEYS, type ModelTier } from "@/lib/config";
+import {
   getTrafficOverview,
   getTopArticlesByRange,
   daysAgoISO,
@@ -286,14 +294,112 @@ export const TOOLS: McpTool[] = [
     description:
       "Add a reusable skill note to the agent's learning memory (applied to future articles). Example: problem_type='article too short', solution_note='expand with background + a local angle'.",
     inputSchema: obj(
-      { problem_type: str("The recurring problem."), solution_note: str("How the agent should handle it.") },
+      {
+        problem_type: str("The recurring problem."),
+        solution_note: str("How the agent should handle it."),
+        agent_key: str(`Optional: scope to one agent (${AGENT_KEYS.join("|")}). Default 'all'.`),
+      },
       ["problem_type", "solution_note"],
     ),
     handler: async (a) => {
-      const id = await addSkillNote(String(a.problem_type), String(a.solution_note));
-      await logMcpAction("add_skill_note", { problem_type: a.problem_type }, id);
+      const agentKey = a.agent_key ? String(a.agent_key) : "all";
+      if (agentKey !== "all" && !isAgentKey(agentKey)) {
+        throw new Error(`Unknown agent_key. Use 'all' or one of: ${AGENT_KEYS.join(", ")}`);
+      }
+      const id = await addSkillNote(String(a.problem_type), String(a.solution_note), agentKey);
+      await logMcpAction("add_skill_note", { problem_type: a.problem_type, agent_key: agentKey }, id);
       const all = await listSkillNotes(20);
-      return { text: `Skill note added. The agent now has ${all.length} note(s).`, data: { id } };
+      return { text: `Skill note added (agent: ${agentKey}). ${all.length} note(s) total.`, data: { id } };
+    },
+  },
+
+  // ─── V3 per-agent configs (spec §11.5) ───
+  {
+    name: "telugulo_list_agents",
+    description: "List all V3 newsroom agents with enabled state, model tier and last update.",
+    readOnly: true,
+    inputSchema: obj({}),
+    handler: async () => {
+      const configs = await listAgentConfigs();
+      const text = configs.length
+        ? configs.map((c) => `• ${c.agent_key} (${c.display_name ?? ""}) — ${c.enabled ? "ON" : "OFF"} · tier: ${c.model_tier} · updated ${c.updated_at?.slice(0, 10)}`).join("\n")
+        : "No agent configs yet — run the 0009 migration.";
+      return { text, data: { agents: configs } };
+    },
+  },
+  {
+    name: "telugulo_get_agent_config",
+    description: `Get one agent's config (instructions, model tier, enabled) + its scoped skill notes. agent_key: ${AGENT_KEYS.join("|")}.`,
+    readOnly: true,
+    inputSchema: obj({ agent_key: str("Which agent.") }, ["agent_key"]),
+    handler: async (a) => {
+      const key = String(a.agent_key);
+      if (!isAgentKey(key)) throw new Error(`Unknown agent_key. Use one of: ${AGENT_KEYS.join(", ")}`);
+      const [cfg, notes] = await Promise.all([getAgentConfig(key), getAgentSkillNotes(key, 20)]);
+      if (!cfg) throw new Error(`No config for ${key} — run the 0009 migration.`);
+      return {
+        text: `${cfg.display_name ?? key} — ${cfg.enabled ? "ON" : "OFF"} · tier: ${cfg.model_tier}\n\nINSTRUCTIONS:\n${cfg.instructions ?? "(none)"}\n\nSKILL NOTES:\n${notes.map((n) => `- ${n}`).join("\n") || "(none)"}`,
+        data: { config: cfg, skill_notes: notes },
+      };
+    },
+  },
+  {
+    name: "telugulo_update_agent_config",
+    description:
+      "Replace ONE agent's own instructions (its layer on top of the shared newsroom rules). IMPORTANT: pass confirm=true to apply.",
+    inputSchema: obj(
+      {
+        agent_key: str(`Which agent (${AGENT_KEYS.join("|")}).`),
+        instructions: str("The agent-specific instructions."),
+        confirm: bool("Must be true to apply."),
+      },
+      ["agent_key", "instructions"],
+    ),
+    handler: async (a) => {
+      const key = String(a.agent_key);
+      if (!isAgentKey(key)) throw new Error(`Unknown agent_key. Use one of: ${AGENT_KEYS.join(", ")}`);
+      const instructions = String(a.instructions || "").trim();
+      if (!a.confirm) {
+        return {
+          text: `This will change how the "${key}" agent behaves on every future run. Preview:\n\n${instructions.slice(0, 400)}\n\nRe-call with confirm=true to apply.`,
+          data: { pending_confirmation: true },
+        };
+      }
+      await updateAgentConfig(key, { instructions });
+      await logMcpAction("update_agent_config", { agent_key: key, length: instructions.length }, "updated");
+      return { text: `Instructions for "${key}" updated — applies from the next run.`, data: { ok: true } };
+    },
+  },
+  {
+    name: "telugulo_toggle_agent",
+    description: "Turn one V3 agent on/off (e.g. disable fact_checker temporarily).",
+    inputSchema: obj(
+      { agent_key: str(`Which agent (${AGENT_KEYS.join("|")}).`), enabled: bool("true = on, false = off.") },
+      ["agent_key", "enabled"],
+    ),
+    handler: async (a) => {
+      const key = String(a.agent_key);
+      if (!isAgentKey(key)) throw new Error(`Unknown agent_key. Use one of: ${AGENT_KEYS.join(", ")}`);
+      await updateAgentConfig(key, { enabled: Boolean(a.enabled) });
+      await logMcpAction("toggle_agent", { agent_key: key, enabled: a.enabled }, "updated");
+      return { text: `Agent "${key}" is now ${a.enabled ? "ENABLED" : "DISABLED"}.`, data: { ok: true } };
+    },
+  },
+  {
+    name: "telugulo_set_agent_model",
+    description: "Move one agent between model tiers. tier: cheap | mid | best.",
+    inputSchema: obj(
+      { agent_key: str(`Which agent (${AGENT_KEYS.join("|")}).`), tier: str("cheap | mid | best.") },
+      ["agent_key", "tier"],
+    ),
+    handler: async (a) => {
+      const key = String(a.agent_key);
+      if (!isAgentKey(key)) throw new Error(`Unknown agent_key. Use one of: ${AGENT_KEYS.join(", ")}`);
+      const tier = String(a.tier) as ModelTier;
+      if (!["cheap", "mid", "best"].includes(tier)) throw new Error("tier must be cheap | mid | best");
+      await updateAgentConfig(key, { model_tier: tier });
+      await logMcpAction("set_agent_model", { agent_key: key, tier }, "updated");
+      return { text: `Agent "${key}" moved to the ${tier} model tier.`, data: { ok: true } };
     },
   },
 

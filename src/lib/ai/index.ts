@@ -62,9 +62,11 @@ export type StepResult = TextGenResult & {
 export async function runStepWithFallback(
   step: StepKey,
   params: TextGenParams,
+  override?: { provider?: TextProvider; model?: string },
 ): Promise<StepResult> {
   const map = await getModelMap();
-  const { provider, model } = map[step];
+  const provider = override?.provider ?? map[step].provider;
+  const model = override?.model ?? map[step].model;
   try {
     const key = await keyFor(provider as CredentialProvider);
     return await generateText(provider, model, key, params);

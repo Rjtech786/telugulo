@@ -102,7 +102,16 @@ export async function POST(req: NextRequest) {
             id,
             result: {
               content: [{ type: "text", text: out.text }],
-              ...(out.data !== undefined ? { structuredContent: out.data } : {}),
+              // structuredContent MUST be a dict object per the MCP schema —
+              // wrap arrays/primitives (fixes list_skill_notes/list_drafts).
+              ...(out.data !== undefined
+                ? {
+                    structuredContent:
+                      out.data !== null && typeof out.data === "object" && !Array.isArray(out.data)
+                        ? out.data
+                        : { items: out.data },
+                  }
+                : {}),
             },
           };
         } catch (e) {

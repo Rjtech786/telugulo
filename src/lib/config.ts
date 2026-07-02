@@ -53,7 +53,38 @@ export type StepKey =
   | "ceo"
   | "learning"
   | "performance"
-  | "ads";
+  | "ads"
+  // V3 Verify Mode steps
+  | "niche_filter"
+  | "dup_check"
+  | "facts_extract"
+  | "fact_check"
+  | "language_edit"
+  | "discover_check"
+  | "fixer";
+
+// ─── V3 agent keys (per-agent configs in `agent_configs`) ───
+export const AGENT_KEYS = [
+  "topic_scout",
+  "dup_guard",
+  "researcher",
+  "writer",
+  "fact_checker",
+  "language_editor",
+  "discover_checker",
+  "fixer",
+  "image_agent",
+  "ceo",
+] as const;
+export type AgentKey = (typeof AGENT_KEYS)[number];
+
+export type ModelTier = "cheap" | "mid" | "best";
+/** Map an agent tier to the closest model tier in TEXT_MODELS. */
+export const TIER_TO_MODEL_TIER: Record<ModelTier, "cheap" | "medium" | "quality"> = {
+  cheap: "cheap",
+  mid: "medium",
+  best: "quality",
+};
 
 export const PIPELINE_STEPS: {
   key: StepKey;
@@ -71,6 +102,13 @@ export const PIPELINE_STEPS: {
   { key: "quality_check", label: "Quality & Humanizer agent", hint: "checks meaning/human tone, simplifies hard Telugu, auto-fixes", defaultProvider: "claude", defaultModel: "claude-sonnet-4-6" },
   { key: "seo_check", label: "SEO agent", hint: "checks + auto-fixes title/meta/slug/headings", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
   { key: "ceo", label: "CEO agent", hint: "orchestrates all agents, final verdict", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
+  { key: "niche_filter", label: "Niche filter (V3)", hint: "on-niche classification", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
+  { key: "dup_check", label: "Duplicate guard (V3)", hint: "semantic dup check", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
+  { key: "facts_extract", label: "Facts table (V3)", hint: "structure research into facts", defaultProvider: "claude", defaultModel: "claude-sonnet-4-6" },
+  { key: "fact_check", label: "Fact Checker (V3)", hint: "claims vs facts table", defaultProvider: "claude", defaultModel: "claude-sonnet-4-6" },
+  { key: "language_edit", label: "Language Editor (V3)", hint: "Telugu deep pass", defaultProvider: "claude", defaultModel: "claude-sonnet-4-6" },
+  { key: "discover_check", label: "Discover Checker (V3)", hint: "SEO + Discover checklist", defaultProvider: "claude", defaultModel: "claude-sonnet-4-6" },
+  { key: "fixer", label: "Fixer (V3)", hint: "applies reviewer fixes", defaultProvider: "claude", defaultModel: "claude-opus-4-8" },
   { key: "learning", label: "Learning agent", hint: "data analysis", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
   { key: "performance", label: "Performance analysis", hint: "pattern finding", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
   { key: "ads", label: "Ads placement", hint: "simple decision", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
