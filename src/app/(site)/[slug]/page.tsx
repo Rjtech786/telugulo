@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPublishedBySlug, getAuthor, listPublished, listRelated } from "@/lib/public";
-import { pickAds } from "@/lib/ads";
+import { pickAds, pickBodyPlacement, placementFraction } from "@/lib/ads";
 import { getArticleLayoutSettings } from "@/lib/settings";
 import { stripInlineSourcesSection, extractHeadings } from "@/lib/article-toc";
 import { ArticleBody } from "@/components/article-body";
@@ -65,15 +65,16 @@ export default async function ArticlePage({
   const a = await getPublishedBySlug(slug);
   if (!a) notFound();
 
-  const [author, related, ads, layout] = await Promise.all([
+  const [author, related, ads, layout, bodyPlacement] = await Promise.all([
     a.author_id ? getAuthor(a.author_id) : Promise.resolve(null),
     listRelated(a.category, a.id, 6),
     pickAds({ category: a.category, title: a.title, summary: a.summary, body: a.body }, 2),
     getArticleLayoutSettings(),
+    pickBodyPlacement(),
   ]);
   const cleanBody = stripInlineSourcesSection(a.body || "");
   const headings = extractHeadings(cleanBody);
-  const [bodyTop, bodyRest] = splitBodyForAd(cleanBody);
+  const [bodyTop, bodyRest] = splitBodyForAd(cleanBody, placementFraction(bodyPlacement));
   const sourceLinks = (a.source_urls ?? []).filter(
     (s): s is { title?: string; url: string; source?: string } => Boolean(s.url),
   );
@@ -198,7 +199,7 @@ export default async function ArticlePage({
         <ArticleBody body={bodyTop} />
         {ads[0] && bodyRest && (
           <div className="my-7">
-            <AdCard ad={ads[0]} />
+            <AdCard ad={ads[0]} placement={bodyPlacement} />
           </div>
         )}
         {bodyRest && <ArticleBody body={bodyRest} lead={false} />}
@@ -210,7 +211,7 @@ export default async function ArticlePage({
 
       {(ads[1] ?? ads[0]) && (
         <div className="mt-6">
-          <AdCard ad={ads[1] ?? ads[0]} variant="banner" />
+          <AdCard ad={ads[1] ?? ads[0]} variant="banner" placement="end" />
         </div>
       )}
 
@@ -259,14 +260,16 @@ export default async function ArticlePage({
 }
 
 /**
- * Split the markdown body near the middle at a safe paragraph boundary (never
- * right before a list item / blockquote continuation) for the in-article ad.
- * Short articles aren't split at all.
+ * Split the markdown body at a safe paragraph boundary (never right before a
+ * list item / blockquote continuation) for the in-article ad. `fraction`
+ * (0-1) is picked by pickBodyPlacement() based on real CTR data — e.g. 0.3
+ * puts the ad ~30% of the way through instead of always dead-center. Short
+ * articles aren't split at all.
  */
-function splitBodyForAd(body: string): [string, string] {
+function splitBodyForAd(body: string, fraction = 0.5): [string, string] {
   const paras = body.split(/\n{2,}/);
   if (paras.length < 6) return [body, ""];
-  let idx = Math.ceil(paras.length / 2);
+  let idx = Math.max(1, Math.round(paras.length * fraction));
   while (idx < paras.length - 1 && /^\s*([#>*-]|\d+\.)/.test(paras[idx])) idx++;
   if (idx >= paras.length - 1) return [body, ""];
   return [paras.slice(0, idx).join("\n\n"), paras.slice(idx).join("\n\n")];

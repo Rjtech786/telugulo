@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AdImageCarousel } from "@/components/ad-image-carousel";
+import { AdViewPing } from "@/components/ad-view-ping";
 import type { Ad } from "@/lib/ads";
 
 const SESSION_KEY = "telugulo_popup_ad_shown";
@@ -37,6 +38,7 @@ export function PopupAd({ ad, delaySeconds }: { ad: Ad | null; delaySeconds: num
       aria-modal="true"
       onClick={() => setVisible(false)}
     >
+      <AdViewPing id={ad.id} placement="popup" />
       <div
         className="relative w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
@@ -49,7 +51,7 @@ export function PopupAd({ ad, delaySeconds }: { ad: Ad | null; delaySeconds: num
           ✕
         </button>
         <a
-          href={`/api/ads/click?id=${ad.id}`}
+          href={`/api/ads/click?id=${ad.id}&placement=popup`}
           target="_blank"
           rel="nofollow sponsored noopener"
           className="block"

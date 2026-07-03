@@ -124,7 +124,7 @@ export default async function HomePage() {
 
       {/* ── Sponsored banner ── */}
       <div className="mt-10">
-        <AdSlot target={{}} variant="banner" type="banner" />
+        <AdSlot target={{}} variant="banner" type="banner" placement="homepage" />
       </div>
 
       {/* ── Web Stories ── */}

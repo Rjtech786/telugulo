@@ -441,6 +441,43 @@ function AdsAnalytics({ analytics }: { analytics: AdAnalytics }) {
           </table>
         </div>
       )}
+
+      {analytics.placements.length > 0 && (
+        <div className="mt-5">
+          <div className="mb-2 text-sm font-semibold text-ink">
+            In-article placement (last 30d) — auto-picked by CTR
+          </div>
+          <p className="mb-2 text-xs text-ink-mute">
+            AI khud decide karta hai article me ad kahan (early/middle/late) rakhni hai — jo jagah
+            best CTR deti hai wahi zyada baar chuni jaati hai, baaki 20% waqt naye spots test karta
+            rehta hai taaki result badalne pe placement bhi badal jaye.
+          </p>
+          <div className="overflow-x-auto rounded-xl border border-line">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-surface text-xs text-ink-mute">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Placement</th>
+                  <th className="px-3 py-2 font-medium">Views</th>
+                  <th className="px-3 py-2 font-medium">Clicks</th>
+                  <th className="px-3 py-2 font-medium">CTR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analytics.placements.map((p, i) => (
+                  <tr key={p.placement} className="border-t border-line">
+                    <td className="px-3 py-2 capitalize text-ink">
+                      {p.placement} {i === 0 && <span className="ml-1 text-[10px] font-bold text-green-600">★ leading</span>}
+                    </td>
+                    <td className="px-3 py-2 tabular-nums text-ink-soft">{p.views}</td>
+                    <td className="px-3 py-2 tabular-nums text-ink-soft">{p.clicks}</td>
+                    <td className="px-3 py-2 tabular-nums text-ink-soft">{p.ctr}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

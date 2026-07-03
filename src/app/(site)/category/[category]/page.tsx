@@ -50,7 +50,7 @@ export default async function CategoryPage({
             ))}
           </div>
           <div className="mt-8">
-            <AdSlot target={{ category }} variant="banner" type="banner" />
+            <AdSlot target={{ category }} variant="banner" type="banner" placement="category" />
           </div>
         </>
       )}

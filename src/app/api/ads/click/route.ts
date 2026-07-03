@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
 
   const link = await getAdLink(id);
   try {
-    await recordAdClick(id);
+    await recordAdClick(id, request.nextUrl.searchParams.get("placement"));
   } catch {
     // best-effort
   }

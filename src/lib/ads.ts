@@ -26,6 +26,62 @@ export type Ad = {
 
 export type AdCopy = { headline: string; description: string; cta: string };
 
+// ── Adaptive in-article placement ──
+// Where the mid-body card ad can go. Picked by real CTR data, not fixed.
+export const BODY_PLACEMENTS = ["early", "middle", "late"] as const;
+export type BodyPlacement = (typeof BODY_PLACEMENTS)[number];
+const PLACEMENT_FRACTION: Record<BodyPlacement, number> = { early: 0.3, middle: 0.5, late: 0.7 };
+const EXPLORE_RATE = 0.2; // 20% of the time, try a placement even if another looks better
+const MIN_VIEWS_TO_TRUST = 20; // below this, a placement's CTR is too noisy to act on
+
+export function placementFraction(p: BodyPlacement): number {
+  return PLACEMENT_FRACTION[p];
+}
+
+/**
+ * Epsilon-greedy pick: mostly use whichever body placement has the best CTR
+ * so far (across all card ads — individual ads rotate too often to have
+ * their own reliable per-placement stats), but keep exploring the others so
+ * a currently-losing spot can still recover if it starts performing.
+ */
+export async function pickBodyPlacement(): Promise<BodyPlacement> {
+  if (Math.random() < EXPLORE_RATE) {
+    return BODY_PLACEMENTS[Math.floor(Math.random() * BODY_PLACEMENTS.length)];
+  }
+  const stats = await getPlacementStats();
+  const trusted = BODY_PLACEMENTS.filter((p) => (stats[p]?.views ?? 0) >= MIN_VIEWS_TO_TRUST);
+  if (trusted.length === 0) {
+    // Not enough data yet anywhere — explore uniformly.
+    return BODY_PLACEMENTS[Math.floor(Math.random() * BODY_PLACEMENTS.length)];
+  }
+  return trusted.reduce((best, p) => (ctrOf(stats[p]) > ctrOf(stats[best]) ? p : best));
+}
+
+function ctrOf(s?: { views: number; clicks: number }): number {
+  return s && s.views > 0 ? s.clicks / s.views : 0;
+}
+
+export type PlacementStats = Record<string, { views: number; clicks: number }>;
+
+/** Views/clicks per placement tag, last 30 days, across all card ads. */
+export async function getPlacementStats(days = 30): Promise<PlacementStats> {
+  const supabase = createAdminClient();
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const { data } = await supabase
+    .from("ad_events")
+    .select("placement, event")
+    .not("placement", "is", null)
+    .gte("created_at", since);
+  const stats: PlacementStats = {};
+  for (const row of (data ?? []) as { placement: string; event: "view" | "click" }[]) {
+    const s = stats[row.placement] ?? { views: 0, clicks: 0 };
+    if (row.event === "view") s.views++;
+    else s.clicks++;
+    stats[row.placement] = s;
+  }
+  return stats;
+}
+
 /** Tolerant JSON extraction from a model response. */
 function parseJson<T>(raw: string): T {
   let s = raw.trim();
@@ -203,11 +259,24 @@ export async function deleteAd(id: string) {
   if (error) throw error;
 }
 
-export async function recordAdClick(id: string) {
+export async function recordAdClick(id: string, placement?: string | null) {
   const supabase = createAdminClient();
   await Promise.all([
     supabase.rpc("increment_ad_clicks", { ad_id: id }),
-    supabase.from("ad_events").insert({ ad_id: id, event: "click" }),
+    supabase.from("ad_events").insert({ ad_id: id, event: "click", placement: placement ?? null }),
+  ]).catch(() => {});
+}
+
+/**
+ * Record a GENUINE view — called from the client-side ping (AdViewPing),
+ * never during SSR/SSG, so builds/ISR regeneration never inflate counts
+ * (that used to make "views" wildly overcounted vs real traffic).
+ */
+export async function recordGenuineAdView(id: string, placement?: string | null): Promise<void> {
+  const supabase = createAdminClient();
+  await Promise.all([
+    supabase.rpc("increment_ad_views", { ad_id: id }),
+    supabase.from("ad_events").insert({ ad_id: id, event: "view", placement: placement ?? null }),
   ]).catch(() => {});
 }
 
@@ -221,13 +290,15 @@ export async function getAdLink(id: string): Promise<string | null> {
 export type AdAnalytics = {
   series: { day: string; views: number; clicks: number }[];
   perAd: { id: string; title: string; type: AdType; views: number; clicks: number; ctr: number }[];
+  placements: { placement: string; views: number; clicks: number; ctr: number }[];
 };
 
 export async function getAdAnalytics(days = 14): Promise<AdAnalytics> {
   const supabase = createAdminClient();
-  const [{ data: rows }, ads] = await Promise.all([
+  const [{ data: rows }, ads, placementStats] = await Promise.all([
     supabase.rpc("daily_ad_events", { p_days: days }),
     listAds(),
+    getPlacementStats(30),
   ]);
   const byDay = new Map((rows as { day: string; views: number; clicks: number }[] | null ?? []).map((r) => [r.day, r]));
   const series = [];
@@ -244,7 +315,15 @@ export async function getAdAnalytics(days = 14): Promise<AdAnalytics> {
     clicks: a.clicks,
     ctr: a.views > 0 ? Math.round((a.clicks / a.views) * 1000) / 10 : 0,
   }));
-  return { series, perAd };
+  const placements = Object.entries(placementStats)
+    .map(([placement, s]) => ({
+      placement,
+      views: s.views,
+      clicks: s.clicks,
+      ctr: s.views > 0 ? Math.round((s.clicks / s.views) * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => b.ctr - a.ctr);
+  return { series, perAd, placements };
 }
 
 // ── Public (anon, RLS → only active ads) ──
@@ -279,16 +358,6 @@ function scoreAd(ad: Ad, text: string, category?: string | null): number {
   return score;
 }
 
-/** Best-effort ad-view counter (undercounts under ISR caching — fine). */
-async function recordAdViews(ids: string[]): Promise<void> {
-  if (ids.length === 0) return;
-  const supabase = createAdminClient();
-  await Promise.all([
-    ...ids.map((id) => supabase.rpc("increment_ad_views", { ad_id: id })),
-    supabase.from("ad_events").insert(ids.map((ad_id) => ({ ad_id, event: "view" }))),
-  ]).catch(() => {});
-}
-
 /**
  * Pick up to `count` active ads of one `type` for a page, most relevant
  * first. Keywords are a PRIORITY BOOST, not a hard filter: keyword-matched
@@ -303,14 +372,11 @@ export async function pickAds(target: AdTarget, count = 1, type: AdType = "card"
 
   const text = `${target.title ?? ""} ${target.summary ?? ""} ${target.category ?? ""} ${target.body ?? ""}`.toLowerCase();
 
-  const picked = ads
+  return ads
     .map((ad) => ({ ad, score: scoreAd(ad, text, target.category), r: Math.random() }))
     .sort((a, b) => b.score - a.score || a.r - b.r)
     .slice(0, count)
     .map((s) => s.ad);
-
-  void recordAdViews(picked.map((a) => a.id));
-  return picked;
 }
 
 /** Single most relevant card ad (back-compat helper). */
