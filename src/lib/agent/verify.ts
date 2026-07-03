@@ -105,6 +105,7 @@ export async function runVerifyMode(
   factsBlock: string,
   candidates: { title: string; slug: string }[],
   note: (msg: string, agent?: "fact_checker" | "language_editor" | "discover_checker" | "fixer", status?: "working" | "done" | "fixed" | "failed") => Promise<void>,
+  minWords = 600,
   maxLoops = 3,
 ): Promise<VerifyResult> {
   let article = { ...input };
@@ -134,7 +135,7 @@ export async function runVerifyMode(
         : runAgentStep("fact_checker", "fact_check", {
             system: assembleAgentSystem("You review strictly and reply with exact JSON.", factCfg, factNotes),
             prompt: factCheckerPrompt(article.body, article.headline, factsBlock),
-            maxTokens: 2000,
+            maxTokens: 4000, // long Telugu quotes in issue JSON — 2000 was truncating (parse fail → score 0)
             temperature: 0,
           }, factCfg).then((r) => normalize(parseJson<ReviewerOutput>(r.text))).catch(() => normalize(null)),
       langCfg?.enabled === false
@@ -142,7 +143,7 @@ export async function runVerifyMode(
         : runAgentStep("language_editor", "language_edit", {
             system: assembleAgentSystem("You review Telugu strictly and reply with exact JSON.", langCfg, langNotes),
             prompt: languageEditorPrompt(article.body, banned),
-            maxTokens: 2500,
+            maxTokens: 4000,
             temperature: 0,
           }, langCfg).then((r) => normalize(parseJson<ReviewerOutput>(r.text))).catch(() => normalize(null)),
       discCfg?.enabled === false
@@ -156,7 +157,7 @@ export async function runVerifyMode(
               sources: [],
               candidates,
             }),
-            maxTokens: 2000,
+            maxTokens: 3000,
             temperature: 0,
           }, discCfg).then((r) => normalize(parseJson<ReviewerOutput>(r.text))).catch(() => normalize(null)),
     ]);
@@ -189,7 +190,7 @@ export async function runVerifyMode(
     try {
       const fixed = await runAgentStep("fixer", "fixer", {
         system: assembleAgentSystem("You fix articles precisely without adding unsupported facts.", fixCfg, await getAgentSkillNotes("fixer")),
-        prompt: fixerPrompt({ ...article, factsBlock, issues: allIssues }),
+        prompt: fixerPrompt({ ...article, factsBlock, issues: allIssues, minWords }),
         maxTokens: 8000,
         temperature: 0.3,
       }, fixCfg);

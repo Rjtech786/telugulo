@@ -9,6 +9,9 @@ import {
   getV3Panel,
   saveAgentConfigAction,
   setAutoPublish,
+  saveSystemSettings,
+  startReverify,
+  type SystemSettings,
 } from "./actions";
 import type { PipelineRunRow } from "@/lib/agent/pipelineRuns";
 import type { AgentConfig } from "@/lib/agent/agentConfigs";
@@ -176,8 +179,14 @@ const DEMO_RUN: AgentRun = {
   finished_at: null,
 };
 
-const DEMO_V3: { configs: AgentConfig[]; pipelineRuns: PipelineRunRow[]; autoPublish: boolean } = {
+const DEMO_V3: {
+  configs: AgentConfig[];
+  pipelineRuns: PipelineRunRow[];
+  autoPublish: boolean;
+  system: { systemOn: boolean; publishTime: string; minWords: number; maxWords: number };
+} = {
   autoPublish: true,
+  system: { systemOn: true, publishTime: "08:00", minWords: 600, maxWords: 900 },
   configs: AGENT_IDS.filter((a) => CONFIG_KEY[a]).map((a) => ({
     agent_key: CONFIG_KEY[a]!,
     display_name: AGENT_META[a].label,
@@ -189,7 +198,7 @@ const DEMO_V3: { configs: AgentConfig[]; pipelineRuns: PipelineRunRow[]; autoPub
   pipelineRuns: [
     { final_status: "published", reviewer_scores: { fact: 9, language: 8, discover: 9, loops: 2 } },
     { final_status: "published", reviewer_scores: { fact: 9, language: 9, discover: 8, loops: 1 } },
-    { final_status: "draft_failed", reviewer_scores: { fact: 6, language: 7, discover: 7, loops: 3 }, failure_report: { failed_validators: [{ name: "script_purity", detail: 'Foreign char "خ"' }] } },
+    { final_status: "draft_failed", article_id: "demo-a1", reviewer_scores: { fact: 6, language: 7, discover: 7, loops: 3 }, failure_report: { failed_validators: [{ name: "script_purity", detail: 'Foreign char "خ"' }] } },
     { final_status: "skipped_duplicate" },
     { final_status: "published", reviewer_scores: { fact: 10, language: 9, discover: 9, loops: 1 } },
     { final_status: "skipped_off_niche" },
@@ -222,6 +231,10 @@ export function CeoSystem({ demo = false }: { demo?: boolean }) {
   const [cfgDraft, setCfgDraft] = useState({ instructions: "", model_tier: "mid", enabled: true });
   const [cfgSaving, setCfgSaving] = useState(false);
   const [cfgMsg, setCfgMsg] = useState<string | null>(null);
+  const [sysDraft, setSysDraft] = useState<SystemSettings | null>(null);
+  const [sysSaving, setSysSaving] = useState(false);
+  const [sysMsg, setSysMsg] = useState<string | null>(null);
+  const [reverifying, setReverifying] = useState(false);
 
   const loadV3 = useCallback(async () => {
     if (demo) return;
@@ -320,6 +333,24 @@ export function CeoSystem({ demo = false }: { demo?: boolean }) {
       applyMessages(messages);
     } finally {
       setStarting(false);
+    }
+  }
+
+  async function reverifyNow(articleId: string) {
+    setReverifying(true);
+    try {
+      const { runId } = await startReverify(articleId);
+      liveRunId.current = runId;
+      seenCount.current = 0;
+      setLiveMessages([]);
+      setPulses([]);
+      setSelectedRun(null);
+      const { run, messages } = await getCeoRunStatus(runId);
+      setLiveRun(run);
+      applyMessages(messages);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      setReverifying(false);
     }
   }
 
@@ -703,6 +734,75 @@ export function CeoSystem({ demo = false }: { demo?: boolean }) {
 
       {/* ─── Run history strip + reports ─── */}
       <div className="space-y-4 border-t border-white/10 bg-[#0d0d20] px-5 py-4">
+        {/* Newsroom system settings: ON/OFF, run time, word range */}
+        {v3 && (() => {
+          const sys = sysDraft ?? v3.system;
+          return (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Newsroom</span>
+              <button
+                onClick={() => { setSysMsg(null); setSysDraft({ ...sys, systemOn: !sys.systemOn }); }}
+                className={
+                  "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold transition " +
+                  (sys.systemOn
+                    ? "border-green-400/40 bg-green-500/10 text-green-300 hover:bg-green-500/20"
+                    : "border-red-400/40 bg-red-500/10 text-red-300 hover:bg-red-500/20")
+                }
+              >
+                <span className={"h-1.5 w-1.5 rounded-full " + (sys.systemOn ? "bg-green-400" : "bg-red-400")} />
+                System {sys.systemOn ? "ON" : "OFF"}
+              </button>
+              <label className="flex items-center gap-1.5 text-xs text-slate-300">
+                Daily run (IST):
+                <input
+                  type="time"
+                  value={sys.publishTime}
+                  onChange={(e) => { setSysMsg(null); setSysDraft({ ...sys, publishTime: e.target.value }); }}
+                  className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-slate-200 [color-scheme:dark]"
+                />
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-300">
+                Words:
+                <input
+                  type="number" min={300} max={2000} step={50}
+                  value={sys.minWords}
+                  onChange={(e) => { setSysMsg(null); setSysDraft({ ...sys, minWords: Number(e.target.value) }); }}
+                  className="w-[70px] rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-slate-200"
+                />
+                –
+                <input
+                  type="number" min={300} max={2000} step={50}
+                  value={sys.maxWords}
+                  onChange={(e) => { setSysMsg(null); setSysDraft({ ...sys, maxWords: Number(e.target.value) }); }}
+                  className="w-[70px] rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs text-slate-200"
+                />
+              </label>
+              <button
+                onClick={async () => {
+                  if (!sysDraft) return;
+                  setSysSaving(true);
+                  setSysMsg(null);
+                  try {
+                    if (!demo) await saveSystemSettings(sysDraft);
+                    setSysMsg("Saved ✓");
+                    setV3({ ...v3, system: sysDraft });
+                    setSysDraft(null);
+                  } catch (e) {
+                    setSysMsg(e instanceof Error ? e.message : "Save failed");
+                  } finally {
+                    setSysSaving(false);
+                  }
+                }}
+                disabled={sysSaving || !sysDraft}
+                className="rounded-lg bg-gradient-to-r from-[#7c6ce8] to-[#5b46e0] px-3 py-1 text-xs font-bold text-white transition hover:brightness-110 disabled:opacity-40"
+              >
+                {sysSaving ? "Saving…" : "Save"}
+              </button>
+              {sysMsg && <span className="text-[11px] font-medium text-green-400">{sysMsg}</span>}
+            </div>
+          );
+        })()}
+
         {v3 && v3.pipelineRuns.length > 0 && (
           <div>
             <div className="mb-2 flex items-center justify-between">
@@ -750,6 +850,16 @@ export function CeoSystem({ demo = false }: { demo?: boolean }) {
                       {selectedRun.reviewer_scores.discover ?? "—"} · {selectedRun.reviewer_scores.loops ?? 0} loop(s)
                     </span>
                   )}
+                  {(selectedRun.final_status === "draft_failed" || selectedRun.final_status === "error") &&
+                    selectedRun.article_id && (
+                      <button
+                        onClick={() => reverifyNow(selectedRun.article_id!)}
+                        disabled={reverifying || isRunning || demo}
+                        className="ml-auto rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-1 text-[11px] font-bold text-white shadow-[0_0_14px_rgba(245,158,11,0.4)] transition hover:brightness-110 disabled:opacity-50"
+                      >
+                        {reverifying ? "Start…" : "🛡️ Re-verify karo"}
+                      </button>
+                    )}
                 </div>
                 {selectedRun.failure_report != null && (
                   <pre className="mt-1 max-h-52 overflow-auto whitespace-pre-wrap rounded-lg bg-black/40 p-2.5 text-[10.5px] leading-relaxed text-slate-400">

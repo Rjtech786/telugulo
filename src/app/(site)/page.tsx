@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { listPublished, listTrending, type PublicArticle } from "@/lib/public";
+import { listPublished, listTrending, countPublished, type PublicArticle } from "@/lib/public";
 import { ArticleCard, ArticleListItem } from "@/components/article-card";
+import { Pagination } from "@/components/pagination";
 import { Thumb } from "@/components/thumb";
-import { formatDate, CATEGORIES, SITE } from "@/lib/site";
+import { formatDate, SITE } from "@/lib/site";
+import { HOME_FIRST_PAGE, OLDER_PER_PAGE } from "@/lib/paging";
 
 export const revalidate = 300;
 
@@ -29,9 +31,10 @@ const siteJsonLd = {
 };
 
 export default async function HomePage() {
-  const [articles, trending] = await Promise.all([
+  const [articles, trending, total] = await Promise.all([
     listPublished(60),
     listTrending(5),
+    countPublished(),
   ]);
 
   if (articles.length === 0) {
@@ -51,18 +54,11 @@ export default async function HomePage() {
   const topList = rest.slice(0, 3);
   const used = new Set([featured.id, ...topList.map((a) => a.id)]);
 
-  const latest = articles.filter((a) => !used.has(a.id)).slice(0, 8);
+  const latest = articles.filter((a) => !used.has(a.id)).slice(0, HOME_FIRST_PAGE - 4);
   latest.forEach((a) => used.add(a.id));
 
-  const sections = CATEGORIES.map((c) => ({
-    cat: c,
-    items: articles
-      .filter((a) => a.category === c.slug && !used.has(a.id))
-      .slice(0, 4),
-  })).filter((s) => s.items.length > 0);
-  sections.forEach((s) => s.items.forEach((a) => used.add(a.id)));
-
   const stories = articles.slice(0, 5);
+  const totalPages = Math.max(1, 1 + Math.ceil(Math.max(0, total - HOME_FIRST_PAGE) / OLDER_PER_PAGE));
 
   return (
     <div className="py-5">
@@ -114,7 +110,7 @@ export default async function HomePage() {
         </section>
       </div>
 
-      {/* ── Latest: full-width 4-column row ── */}
+      {/* ── Latest: full-width 4-column row + pagination to older pages ── */}
       <section className="mt-10">
         <SectionHeader title="తాజా వార్తలు" />
         <div className="grid grid-cols-2 gap-x-6 gap-y-7 sm:grid-cols-3 lg:grid-cols-4">
@@ -122,23 +118,8 @@ export default async function HomePage() {
             <ArticleCard key={a.id} a={a} />
           ))}
         </div>
+        <Pagination current={1} totalPages={totalPages} />
       </section>
-
-      {/* ── Per-category section blocks (3-column grid) ── */}
-      {sections.length > 0 && (
-        <div className="mt-10 grid gap-x-9 gap-y-10 md:grid-cols-2 lg:grid-cols-3">
-          {sections.map((s) => (
-            <section key={s.cat.slug}>
-              <SectionHeader title={s.cat.label} href={`/category/${s.cat.slug}`} />
-              <div>
-                {s.items.map((a) => (
-                  <ArticleListItem key={a.id} a={a} />
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
-      )}
 
       {/* ── Web Stories ── */}
       <WebStories items={stories} />

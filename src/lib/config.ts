@@ -102,13 +102,16 @@ export const PIPELINE_STEPS: {
   { key: "quality_check", label: "Quality & Humanizer agent", hint: "checks meaning/human tone, simplifies hard Telugu, auto-fixes", defaultProvider: "claude", defaultModel: "claude-sonnet-4-6" },
   { key: "seo_check", label: "SEO agent", hint: "checks + auto-fixes title/meta/slug/headings", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
   { key: "ceo", label: "CEO agent", hint: "orchestrates all agents, final verdict", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
-  { key: "niche_filter", label: "Niche filter (V3)", hint: "on-niche classification", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
-  { key: "dup_check", label: "Duplicate guard (V3)", hint: "semantic dup check", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
-  { key: "facts_extract", label: "Facts table (V3)", hint: "structure research into facts", defaultProvider: "claude", defaultModel: "claude-sonnet-4-6" },
-  { key: "fact_check", label: "Fact Checker (V3)", hint: "claims vs facts table", defaultProvider: "claude", defaultModel: "claude-sonnet-4-6" },
-  { key: "language_edit", label: "Language Editor (V3)", hint: "Telugu deep pass", defaultProvider: "claude", defaultModel: "claude-sonnet-4-6" },
-  { key: "discover_check", label: "Discover Checker (V3)", hint: "SEO + Discover checklist", defaultProvider: "claude", defaultModel: "claude-sonnet-4-6" },
-  { key: "fixer", label: "Fixer (V3)", hint: "applies reviewer fixes", defaultProvider: "claude", defaultModel: "claude-opus-4-8" },
+  // V3 steps default to providers the owner actually has keys for (openai +
+  // gemini; no claude key) — otherwise every call silently falls back to the
+  // cheapest gemini model and verify quality collapses.
+  { key: "niche_filter", label: "Niche filter (V3)", hint: "on-niche classification", defaultProvider: "gemini", defaultModel: "gemini-2.5-flash" },
+  { key: "dup_check", label: "Duplicate guard (V3)", hint: "semantic dup check", defaultProvider: "gemini", defaultModel: "gemini-2.5-flash" },
+  { key: "facts_extract", label: "Facts table (V3)", hint: "structure research into facts", defaultProvider: "openai", defaultModel: "gpt-4o" },
+  { key: "fact_check", label: "Fact Checker (V3)", hint: "claims vs facts table", defaultProvider: "openai", defaultModel: "gpt-4o" },
+  { key: "language_edit", label: "Language Editor (V3)", hint: "Telugu deep pass", defaultProvider: "openai", defaultModel: "gpt-4o" },
+  { key: "discover_check", label: "Discover Checker (V3)", hint: "SEO + Discover checklist", defaultProvider: "openai", defaultModel: "gpt-4o" },
+  { key: "fixer", label: "Fixer (V3)", hint: "applies reviewer fixes", defaultProvider: "openai", defaultModel: "gpt-4.1" },
   { key: "learning", label: "Learning agent", hint: "data analysis", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
   { key: "performance", label: "Performance analysis", hint: "pattern finding", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
   { key: "ads", label: "Ads placement", hint: "simple decision", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },

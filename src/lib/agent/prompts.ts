@@ -445,8 +445,10 @@ export function fixerPrompt(input: {
   body: string;
   factsBlock: string;
   issues: { severity: string; location: string; problem: string; suggested_fix: string }[];
+  minWords?: number;
 }): string {
   return `You are the FIXER for telugulo.in. Reviewers found these issues — fix ALL of them by rewriting the affected sentences fully (natural flow, not patches). NEVER add a fact that is not in the facts table.
+${input.minWords ? `\nLENGTH RULE (HARD): the corrected BODY must stay AT OR ABOVE ${input.minWords} words. Fix by REWRITING sentences, not deleting them — if you must remove an unsupported claim, replace it with supported material from the facts table so the length holds.\n` : ""}
 
 ${input.factsBlock}
 

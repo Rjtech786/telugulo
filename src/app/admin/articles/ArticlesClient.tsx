@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { publish, unpublish, remove, createManualArticle } from "./actions";
+import { startReverify } from "../agent/actions";
 import { formatAdmin } from "@/lib/site";
 
 type Row = {
@@ -147,13 +148,28 @@ function ArticleCard({
           Edit
         </Link>
         {a.status === "draft" ? (
-          <button
-            onClick={() => act(() => publish(a.id))}
-            disabled={pending}
-            className="rounded-lg bg-green-600 px-3 py-1.5 font-medium text-white transition hover:bg-green-700 disabled:opacity-50"
-          >
-            Publish
-          </button>
+          <>
+            <button
+              onClick={() =>
+                start(async () => {
+                  await startReverify(a.id);
+                  router.push("/admin/agent"); // watch it live in Mission Control
+                })
+              }
+              disabled={pending}
+              title="AI reviewers se dobara check + pass hone par auto-publish"
+              className="rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-1.5 font-medium text-white transition hover:brightness-110 disabled:opacity-50"
+            >
+              🛡️ Re-verify
+            </button>
+            <button
+              onClick={() => act(() => publish(a.id))}
+              disabled={pending}
+              className="rounded-lg bg-green-600 px-3 py-1.5 font-medium text-white transition hover:bg-green-700 disabled:opacity-50"
+            >
+              Publish
+            </button>
+          </>
         ) : (
           <button
             onClick={() => act(() => unpublish(a.id))}

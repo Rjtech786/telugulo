@@ -32,10 +32,31 @@ export function SiteHeader({
             </span>
           </Link>
 
-          <div className="hidden items-center gap-3 sm:flex">
-            <span className="text-[12px] text-ink-mute">{today}</span>
-            {socials.length > 0 && <span className="h-4 w-px bg-line" />}
-            <SocialLinks socials={socials} variant="brand" size={16} />
+          <div className="flex items-center gap-3">
+            {/* Search (desktop: inline box · mobile: icon → /search) */}
+            <form action="/search" className="hidden md:block">
+              <div className="flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 transition focus-within:border-accent">
+                <SearchIcon className="h-4 w-4 flex-none text-ink-mute" />
+                <input
+                  type="search"
+                  name="q"
+                  placeholder="వెతకండి…"
+                  className="w-[150px] bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-mute"
+                />
+              </div>
+            </form>
+            <Link
+              href="/search"
+              aria-label="వెతకండి"
+              className="grid h-9 w-9 place-items-center rounded-full border border-line text-ink-soft transition hover:border-accent hover:text-accent md:hidden"
+            >
+              <SearchIcon className="h-4.5 w-4.5" />
+            </Link>
+            <span className="hidden text-[12px] text-ink-mute lg:inline">{today}</span>
+            {socials.length > 0 && <span className="hidden h-4 w-px bg-line sm:inline" />}
+            <span className="hidden sm:flex">
+              <SocialLinks socials={socials} variant="brand" size={16} />
+            </span>
           </div>
         </div>
       </div>
@@ -50,6 +71,15 @@ export function SiteHeader({
         </div>
       </nav>
     </header>
+  );
+}
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className={className} aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
   );
 }
 

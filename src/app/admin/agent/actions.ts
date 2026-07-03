@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import {
   runPipeline,
+  reverifyArticle,
   generateArticleForTopic,
   type PipelineResult,
 } from "@/lib/agent/pipeline";
@@ -23,22 +24,68 @@ import {
   isAgentKey,
   type AgentConfig,
 } from "@/lib/agent/agentConfigs";
-import { getGeneral, writeSetting } from "@/lib/settings";
+import { getGeneral, writeSetting, getFeatures, getQualityRules, setQualityRules } from "@/lib/settings";
 import { SETTINGS_KEYS, type ModelTier } from "@/lib/config";
 
-/** V3 mission-control panel data: agent configs + structured runs + gate flag. */
+export type SystemSettings = {
+  systemOn: boolean; // features.article_generation
+  publishTime: string; // "HH:MM" IST
+  minWords: number;
+  maxWords: number;
+};
+
+/** V3 mission-control panel data: agent configs + structured runs + settings. */
 export async function getV3Panel(): Promise<{
   configs: AgentConfig[];
   pipelineRuns: PipelineRunRow[];
   autoPublish: boolean;
+  system: SystemSettings;
 }> {
   await requireAdmin();
-  const [configs, pipelineRuns, general] = await Promise.all([
+  const [configs, pipelineRuns, general, features, quality] = await Promise.all([
     listAgentConfigs().catch(() => []),
     getRecentPipelineRuns(10).catch(() => []),
     getGeneral(),
+    getFeatures(),
+    getQualityRules(),
   ]);
-  return { configs, pipelineRuns, autoPublish: general.auto_publish };
+  return {
+    configs,
+    pipelineRuns,
+    autoPublish: general.auto_publish,
+    system: {
+      systemOn: features.article_generation,
+      publishTime: general.publish_time,
+      minWords: quality.min_words,
+      maxWords: quality.max_words,
+    },
+  };
+}
+
+/** Save the newsroom system settings (on/off, daily run time, word range). */
+export async function saveSystemSettings(input: SystemSettings): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  if (!/^\d{1,2}:\d{2}$/.test(input.publishTime)) throw new Error("Time HH:MM format me do (IST)");
+  const [general, features] = await Promise.all([getGeneral(), getFeatures()]);
+  await Promise.all([
+    writeSetting(SETTINGS_KEYS.general, { ...general, publish_time: input.publishTime }),
+    writeSetting(SETTINGS_KEYS.features, { ...features, article_generation: input.systemOn }),
+    setQualityRules({ min_words: input.minWords, max_words: input.maxWords }),
+  ]);
+  return { ok: true };
+}
+
+/**
+ * Re-verify a failed draft in the background (same pattern as startCeoRun) —
+ * returns the run id so Mission Control can animate it live.
+ */
+export async function startReverify(articleId: string): Promise<{ runId: string }> {
+  await requireAdmin();
+  const runId = await createRun("manual");
+  reverifyArticle(articleId, runId)
+    .then(() => revalidatePath("/admin/articles"))
+    .catch((e) => console.error("Re-verify failed:", e));
+  return { runId };
 }
 
 /** Save one agent's instructions / tier / enabled from the side panel. */

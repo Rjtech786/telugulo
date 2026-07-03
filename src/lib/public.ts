@@ -65,6 +65,40 @@ export async function listTrending(limit = 6): Promise<PublicArticle[]> {
   return (data as PublicArticle[]) ?? [];
 }
 
+/** Total published count (for pagination). */
+export async function countPublished(): Promise<number> {
+  const { count } = await publicClient()
+    .from("articles")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "published");
+  return count ?? 0;
+}
+
+/** A page of published articles by offset range (newest first). */
+export async function listPublishedRange(from: number, to: number): Promise<PublicArticle[]> {
+  const { data } = await publicClient()
+    .from("articles")
+    .select(LIST_COLS)
+    .eq("status", "published")
+    .order("published_at", { ascending: false })
+    .range(from, to);
+  return (data as PublicArticle[]) ?? [];
+}
+
+/** Simple title/summary search over published articles. */
+export async function searchPublished(q: string, limit = 24): Promise<PublicArticle[]> {
+  const term = q.trim().replace(/[%_,]/g, " ").slice(0, 60);
+  if (!term) return [];
+  const { data } = await publicClient()
+    .from("articles")
+    .select(LIST_COLS)
+    .eq("status", "published")
+    .or(`title.ilike.%${term}%,summary.ilike.%${term}%`)
+    .order("published_at", { ascending: false })
+    .limit(limit);
+  return (data as PublicArticle[]) ?? [];
+}
+
 export async function listByCategory(category: string, limit = 30) {
   const { data } = await publicClient()
     .from("articles")

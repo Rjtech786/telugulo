@@ -30,7 +30,7 @@ import {
 } from "./prompts";
 import { notifyDraft } from "./telegram";
 import { createRun, logMessage, finishRun, type RunTrigger, type AgentId } from "./agentLog";
-import { buildFactsTable, renderFactsForPrompt, factEntities } from "./factsTable";
+import { buildFactsTable, renderFactsForPrompt, factEntities, type FactsTable } from "./factsTable";
 import { runVerifyMode, insertInternalLinks } from "./verify";
 import { runHardValidators, checkDuplicate } from "./validators";
 import { createPipelineRun, updatePipelineRun, type StageLog, type FinalStatus } from "./pipelineRuns";
@@ -189,9 +189,15 @@ export async function runPipeline(
     extra: { articleId?: string; articleTitle?: string; failure?: unknown } = {},
   ): Promise<PipelineResult> => {
     if (pipeId) {
+      // Never clobber an already-written failure_report with null (the
+      // publish gate writes its detailed report before finishAs runs).
       await updatePipelineRun(pipeId, {
         final_status: finalStatus,
-        failure_report: extra.failure ?? (finalStatus.startsWith("skipped") ? { reason } : null),
+        ...(extra.failure !== undefined
+          ? { failure_report: extra.failure }
+          : finalStatus.startsWith("skipped")
+            ? { failure_report: { reason } }
+            : {}),
         article_id: extra.articleId ?? null,
         stage_logs: stageLogs,
       });
@@ -460,8 +466,34 @@ export async function runPipeline(
       async (msg, agent, status) => {
         await note((agent ?? "ceo") as AgentId, agent ? "agent_to_ceo" : "ceo_to_agent", status ?? "working", msg);
       },
+      minWords,
     );
     body = insertInternalLinks(verify.article.body, verify.internalLinks);
+
+    // Fixer rewrites can shrink the body below the word floor — re-expand
+    // once from unused facts before the hard validators get the final say.
+    if (wordCount(body) < minWords && !article.flag_short && facts.facts.length) {
+      await note("writer", "ceo_to_agent", "working", `Verify ke baad body ${wordCount(body)} words reh gayi — unused facts se re-expand kar raha hoon.`);
+      const unused = facts.facts
+        .filter((f) => {
+          const key = f.fact.match(/[A-Za-z0-9]{3,}/g)?.[0];
+          return key ? !body.includes(key) : true;
+        })
+        .map((f) => f.fact);
+      try {
+        const expanded = await runAgentStep("fixer", "fixer", {
+          system: SYSTEM_EDITOR,
+          prompt: expandPrompt(body, unused.slice(0, 12), minWords),
+          maxTokens: 8000,
+          temperature: 0.5,
+        });
+        const newBody = stripFences(expanded.text);
+        if (wordCount(newBody) > wordCount(body)) {
+          body = newBody;
+          await note("writer", "agent_to_ceo", "fixed", `Re-expand ho gaya — ab ${wordCount(body)} words.`);
+        }
+      } catch { /* validators will catch it */ }
+    }
     const headline = verify.article.headline;
     const titleMeta = verify.article.title_meta;
     const metaDescription = verify.article.meta_description;
@@ -528,6 +560,7 @@ export async function runPipeline(
       : "all hard validators passed");
 
     const publishNow = general.auto_publish && verify.passed && validators.pass;
+    let gateFailure: unknown;
     if (publishNow) {
       await supabase
         .from("articles")
@@ -551,14 +584,13 @@ export async function runPipeline(
       }
       await note("ceo", "ceo_to_agent", "done", `Publish Gate PASS — "${headline}" live ho gaya.`);
     } else {
-      const failure = {
+      gateFailure = {
         verify_passed: verify.passed,
         reviewer_scores: { ...verify.scores, loops: verify.loops },
         outstanding_issues: verify.issues.slice(0, 10),
         failed_validators: failedChecks,
         auto_publish: general.auto_publish,
       };
-      if (pipeId) void updatePipelineRun(pipeId, { failure_report: failure });
       await note("ceo", "ceo_to_agent", "failed",
         `Publish Gate FAIL — draft me rakha. ${!verify.passed ? "Verify fail" : ""} ${failedChecks.length ? `validators: ${failedChecks.map((f) => f.name).join(", ")}` : ""}${!general.auto_publish ? " (auto-publish OFF)" : ""}`);
       log.push(`  Kept as DRAFT ${draft.id} (gate failed)`);
@@ -606,12 +638,180 @@ export async function runPipeline(
 
     return finishAs(publishNow ? "published" : "draft_failed",
       publishNow ? "published" : "kept as draft (publish gate failed)",
-      { articleId: draft.id, articleTitle: draft.title });
+      { articleId: draft.id, articleTitle: draft.title, failure: gateFailure });
   } catch (e) {
     const reason = e instanceof Error ? e.message : "unknown";
     log.push(`ERROR: ${reason}`);
     await note("ceo", "ceo_to_agent", "failed", `Run me error aaya: ${reason}`);
     return finishAs("error", reason, { failure: { error: reason } });
+  }
+}
+
+/**
+ * Re-run Verify Mode on an existing draft that failed the gate ("Re-verify"
+ * button). Reuses the stored facts table from the article's original
+ * pipeline_runs row (re-researches if missing), applies fixes, re-runs the
+ * hard validators, and publishes if everything passes (+auto_publish ON).
+ */
+export async function reverifyArticle(
+  articleId: string,
+  existingRunId?: string,
+): Promise<PipelineResult> {
+  const log: string[] = [];
+  const supabase = createAdminClient();
+  const runId = existingRunId ?? (await createRun("manual"));
+  const pipeId = await createPipelineRun("reverify").catch(() => null);
+  const stageLogs: StageLog[] = [];
+
+  const note = (
+    agent: AgentId,
+    direction: "ceo_to_agent" | "agent_to_ceo",
+    status: "working" | "done" | "fixed" | "failed",
+    message: string,
+  ) => {
+    log.push(`[${agent}] ${message}`);
+    return logMessage({ runId, agent, direction, status, message });
+  };
+
+  try {
+    const { data: art, error: readErr } = await supabase
+      .from("articles")
+      .select("id, title, title_meta, meta_description, slug, category, body, image_url, source_urls, status")
+      .eq("id", articleId)
+      .maybeSingle();
+    if (readErr) throw readErr;
+    if (!art) throw new Error("Article not found");
+
+    const general = await getGeneral();
+    const qualityRules = await getQualityRules();
+    const researchSettings = await getResearchSettings();
+    const minWords = qualityRules.min_words;
+
+    await note("ceo", "ceo_to_agent", "working", `Re-verify start: "${art.title}"`);
+
+    // Facts table: reuse the original run's, else re-research.
+    const { data: prevRun } = await supabase
+      .from("pipeline_runs")
+      .select("facts_table")
+      .eq("article_id", articleId)
+      .not("facts_table", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    let facts = (prevRun?.facts_table ?? null) as FactsTable | null;
+    let rawText = "";
+    if (!facts || !(facts.facts?.length || facts.sources?.length)) {
+      await note("researcher", "ceo_to_agent", "working", "Purana facts table nahi mila — fresh research kar raha hoon.");
+      const research = await buildFactsTable(art.title, researchSettings.min_sources);
+      if (!research) throw new Error("Re-research failed — no sources found");
+      facts = research.table;
+      rawText = research.rawText;
+      await note("researcher", "agent_to_ceo", "done", `${facts.facts.length} facts ka fresh table ready.`);
+    }
+    const factsBlock = renderFactsForPrompt(facts, rawText || undefined);
+    if (pipeId) void updatePipelineRun(pipeId, { facts_table: facts, article_id: articleId });
+
+    const { data: candRows } = await supabase
+      .from("articles")
+      .select("title, slug")
+      .eq("status", "published")
+      .eq("category", art.category || "tech")
+      .neq("id", articleId)
+      .order("published_at", { ascending: false })
+      .limit(8);
+
+    const verify = await runVerifyMode(
+      {
+        headline: art.title,
+        title_meta: art.title_meta ?? "",
+        meta_description: art.meta_description ?? "",
+        body: art.body ?? "",
+      },
+      factsBlock,
+      (candRows ?? []) as { title: string; slug: string }[],
+      async (msg, agent, status) => {
+        await note((agent ?? "ceo") as AgentId, agent ? "agent_to_ceo" : "ceo_to_agent", status ?? "working", msg);
+      },
+      minWords,
+    );
+    const body = insertInternalLinks(verify.article.body, verify.internalLinks);
+    if (pipeId) void updatePipelineRun(pipeId, { reviewer_scores: { ...verify.scores, loops: verify.loops } });
+    stageLogs.push({ stage: "verify", summary: `${verify.passed ? "PASSED" : "FAILED"} — fact=${verify.scores.fact} lang=${verify.scores.language} discover=${verify.scores.discover}` });
+
+    // Persist the fixed fields either way (the draft improves every attempt).
+    await supabase
+      .from("articles")
+      .update({
+        title: verify.article.headline,
+        title_meta: verify.article.title_meta,
+        meta_description: verify.article.meta_description,
+        body,
+      })
+      .eq("id", articleId);
+
+    const validators = await runHardValidators(
+      {
+        id: articleId,
+        title: verify.article.headline,
+        slug: art.slug,
+        body,
+        image_url: art.image_url,
+        source_urls: art.source_urls as { title?: string; url?: string; source?: string }[] | null,
+        factEntities: factEntities(facts),
+      },
+      { minWords, maxWords: qualityRules.max_words },
+    );
+    const failedChecks = validators.results.filter((r) => !r.pass);
+    if (pipeId) void updatePipelineRun(pipeId, { hard_validator_results: validators.results, stage_logs: stageLogs });
+
+    const publishNow = general.auto_publish && verify.passed && validators.pass;
+    if (publishNow && art.status !== "published") {
+      await supabase
+        .from("articles")
+        .update({ status: "published", published_at: new Date().toISOString() })
+        .eq("id", articleId);
+    }
+    await note(
+      "ceo",
+      "ceo_to_agent",
+      publishNow ? "done" : "failed",
+      publishNow
+        ? `Re-verify PASS — "${verify.article.headline}" publish ho gaya! 🎉`
+        : `Re-verify ${verify.passed ? "pass hua lekin validators fail" : "FAIL"} (fact ${verify.scores.fact}, lang ${verify.scores.language}, discover ${verify.scores.discover}${failedChecks.length ? ` · validators: ${failedChecks.map((f) => f.name).join(", ")}` : ""}) — draft me hi hai, improvements save ho gaye.`,
+    );
+
+    const failure = publishNow
+      ? undefined
+      : {
+          verify_passed: verify.passed,
+          reviewer_scores: { ...verify.scores, loops: verify.loops },
+          outstanding_issues: verify.issues.slice(0, 10),
+          failed_validators: failedChecks,
+        };
+    if (pipeId) {
+      await updatePipelineRun(pipeId, {
+        final_status: publishNow ? "published" : "draft_failed",
+        ...(failure !== undefined ? { failure_report: failure } : {}),
+      });
+    }
+    await finishRun(runId, publishNow ? "created" : "skipped", {
+      articleId,
+      articleTitle: verify.article.headline,
+      reason: publishNow ? undefined : "re-verify failed — still a draft",
+    });
+    return {
+      status: publishNow ? "created" : "skipped",
+      drafts: [{ id: articleId, title: verify.article.headline, slug: art.slug }],
+      log,
+      reason: publishNow ? undefined : "re-verify failed",
+      runId,
+    };
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : "unknown";
+    await note("ceo", "ceo_to_agent", "failed", `Re-verify error: ${reason}`);
+    if (pipeId) void updatePipelineRun(pipeId, { final_status: "error", failure_report: { error: reason } });
+    await finishRun(runId, "error", { reason });
+    return { status: "error", drafts: [], log, reason, runId };
   }
 }
 

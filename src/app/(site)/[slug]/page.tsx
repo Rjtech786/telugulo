@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPublishedBySlug, getAuthor, listPublished, listRelated } from "@/lib/public";
 import { ArticleBody } from "@/components/article-body";
+import { ReadingProgress } from "@/components/reading-progress";
+import { ShareBar } from "@/components/share-bar";
 import { ViewPing } from "@/components/view-ping";
 import { AdSlot } from "@/components/ad-slot";
 import { Thumb } from "@/components/thumb";
@@ -114,6 +116,7 @@ export default async function ArticlePage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <ViewPing id={a.id} />
+      <ReadingProgress />
 
       <div className="mt-6">
         {a.category ? (
@@ -165,6 +168,10 @@ export default async function ArticlePage({
         </span>
       </div>
 
+      <div className="mt-4">
+        <ShareBar url={url} title={a.title} />
+      </div>
+
       <Thumb
         src={a.image_url}
         alt={a.title}
@@ -176,6 +183,10 @@ export default async function ArticlePage({
 
       <div className="mt-7">
         <ArticleBody body={a.body || ""} />
+      </div>
+
+      <div className="mt-8 rounded-xl border border-line bg-surface px-4 py-3">
+        <ShareBar url={url} title={a.title} />
       </div>
 
       <AdSlot
