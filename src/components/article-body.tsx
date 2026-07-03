@@ -6,9 +6,16 @@ import remarkGfm from "remark-gfm";
  * italic, headings (size), lists, links, blockquotes and inline images. The
  * first paragraph gets a larger "lead" treatment.
  */
-export function ArticleBody({ body }: { body: string }) {
+export function ArticleBody({ body, lead = true }: { body: string; lead?: boolean }) {
   return (
-    <div className="text-[17px] leading-[1.9] text-[#2a2f3a] [&>p:first-of-type]:text-[19px] [&>p:first-of-type]:leading-[1.8] [&>p:first-of-type]:text-ink">
+    <div
+      className={
+        "text-[17px] leading-[1.9] text-[#2a2f3a]" +
+        (lead
+          ? " [&>p:first-of-type]:text-[19px] [&>p:first-of-type]:leading-[1.8] [&>p:first-of-type]:text-ink"
+          : "")
+      }
+    >
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

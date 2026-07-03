@@ -93,8 +93,9 @@ export function AdsClient({ ads }: { ads: Ad[] }) {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-ink">Ads Manager</h1>
         <p className="text-sm text-ink-soft">
-          Image + link + keywords do — AI ek polished ad bana dega, aur wo sirf un
-          articles me dikhega jinke content se keywords match/relate hote hain.
+          Image + link + keywords do — AI ek polished ad bana dega. Active ads ab
+          HAR page pe rotate hote hain (articles me 2 jagah + homepage/category
+          banners); keywords wale ads matching articles pe PRIORITY paate hain.
         </p>
       </div>
 
@@ -129,7 +130,7 @@ export function AdsClient({ ads }: { ads: Ad[] }) {
             <input className={inputCls} value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="mobile" />
           </Field>
           <div className="sm:col-span-2">
-            <Field label="Keywords (comma-separated)" hint="In keywords se match/related articles me hi ad dikhega. Khaali = har post pe (general).">
+            <Field label="Keywords (comma-separated)" hint="Matching articles pe ye ad PEHLE dikhega; baaki pages pe bhi rotation me aata hai. Khaali = pure general.">
               <input className={inputCls} value={form.keywords} onChange={(e) => set("keywords", e.target.value)} placeholder="smartphone, 5g, camera phone, android" />
             </Field>
           </div>

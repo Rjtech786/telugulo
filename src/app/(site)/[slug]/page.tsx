@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPublishedBySlug, getAuthor, listPublished, listRelated } from "@/lib/public";
+import { pickAds } from "@/lib/ads";
 import { ArticleBody } from "@/components/article-body";
 import { ReadingProgress } from "@/components/reading-progress";
 import { ShareBar } from "@/components/share-bar";
 import { ViewPing } from "@/components/view-ping";
-import { AdSlot } from "@/components/ad-slot";
+import { AdCard } from "@/components/ad-slot";
 import { Thumb } from "@/components/thumb";
 import { CategoryBadge, ArticleCard } from "@/components/article-card";
 import { SITE, formatDate, formatDateTime } from "@/lib/site";
@@ -63,6 +64,11 @@ export default async function ArticlePage({
 
   const author = a.author_id ? await getAuthor(a.author_id) : null;
   const related = await listRelated(a.category, a.id, 6);
+  const ads = await pickAds(
+    { category: a.category, title: a.title, summary: a.summary, body: a.body },
+    2,
+  );
+  const [bodyTop, bodyRest] = splitBodyForAd(a.body || "");
   const sourceLinks = (a.source_urls ?? []).filter(
     (s): s is { title?: string; url: string; source?: string } => Boolean(s.url),
   );
@@ -182,21 +188,24 @@ export default async function ArticlePage({
       />
 
       <div className="mt-7">
-        <ArticleBody body={a.body || ""} />
+        <ArticleBody body={bodyTop} />
+        {ads[0] && bodyRest && (
+          <div className="my-7">
+            <AdCard ad={ads[0]} />
+          </div>
+        )}
+        {bodyRest && <ArticleBody body={bodyRest} lead={false} />}
       </div>
 
       <div className="mt-8 rounded-xl border border-line bg-surface px-4 py-3">
         <ShareBar url={url} title={a.title} />
       </div>
 
-      <AdSlot
-        target={{
-          category: a.category,
-          title: a.title,
-          summary: a.summary,
-          body: a.body,
-        }}
-      />
+      {(ads[1] ?? ads[0]) && (
+        <div className="mt-6">
+          <AdCard ad={ads[1] ?? ads[0]} variant="banner" />
+        </div>
+      )}
 
       {sourceLinks.length > 0 && (
         <div className="mt-8 rounded-xl border border-line bg-surface p-4 text-sm">
@@ -246,4 +255,18 @@ export default async function ArticlePage({
 function readMins(body: string | null): number {
   if (!body) return 1;
   return Math.max(1, Math.round(body.split(/\s+/).length / 180));
+}
+
+/**
+ * Split the markdown body near the middle at a safe paragraph boundary (never
+ * right before a list item / blockquote continuation) for the in-article ad.
+ * Short articles aren't split at all.
+ */
+function splitBodyForAd(body: string): [string, string] {
+  const paras = body.split(/\n{2,}/);
+  if (paras.length < 6) return [body, ""];
+  let idx = Math.ceil(paras.length / 2);
+  while (idx < paras.length - 1 && /^\s*([#>*-]|\d+\.)/.test(paras[idx])) idx++;
+  if (idx >= paras.length - 1) return [body, ""];
+  return [paras.slice(0, idx).join("\n\n"), paras.slice(idx).join("\n\n")];
 }

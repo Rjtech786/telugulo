@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listPublished, listTrending, countPublished, type PublicArticle } from "@/lib/public";
 import { ArticleCard, ArticleListItem } from "@/components/article-card";
+import { AdSlot } from "@/components/ad-slot";
 import { Pagination } from "@/components/pagination";
 import { Thumb } from "@/components/thumb";
 import { formatDate, SITE } from "@/lib/site";
@@ -120,6 +121,11 @@ export default async function HomePage() {
         </div>
         <Pagination current={1} totalPages={totalPages} />
       </section>
+
+      {/* ── Sponsored banner ── */}
+      <div className="mt-10">
+        <AdSlot target={{}} variant="banner" />
+      </div>
 
       {/* ── Web Stories ── */}
       <WebStories items={stories} />

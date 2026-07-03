@@ -145,28 +145,38 @@ function scoreAd(ad: Ad, text: string, category?: string | null): number {
   return score;
 }
 
+/** Best-effort ad-view counter (undercounts under ISR caching — fine). */
+async function recordAdViews(ids: string[]): Promise<void> {
+  const supabase = createAdminClient();
+  await Promise.all(ids.map((id) => supabase.rpc("increment_ad_views", { ad_id: id }))).catch(
+    () => {},
+  );
+}
+
 /**
- * Pick the most relevant active ad for an article. Ads with keywords only show
- * when they match/relate to the post; keyword-less ads are general fallbacks.
+ * Pick up to `count` active ads for a page, most relevant first. Keywords are
+ * a PRIORITY BOOST, not a hard filter: keyword-matched ads rank first, then
+ * everything else rotates in — so an active ad is always visible somewhere
+ * (an empty ads table is the only way to get zero ads).
  */
-export async function pickAd(target: AdTarget): Promise<Ad | null> {
+export async function pickAds(target: AdTarget, count = 1): Promise<Ad[]> {
   const { data } = await publicClient().from("ads").select("*").eq("active", true);
   const ads = (data as Ad[]) ?? [];
-  if (ads.length === 0) return null;
+  if (ads.length === 0) return [];
 
   const text = `${target.title ?? ""} ${target.summary ?? ""} ${target.category ?? ""} ${target.body ?? ""}`.toLowerCase();
 
-  const scored = ads.map((ad) => {
-    const hasKeywords = (ad.keywords ?? []).some((k) => k.trim());
-    return { ad, score: scoreAd(ad, text, target.category), hasKeywords };
-  });
+  const picked = ads
+    .map((ad) => ({ ad, score: scoreAd(ad, text, target.category), r: Math.random() }))
+    .sort((a, b) => b.score - a.score || a.r - b.r)
+    .slice(0, count)
+    .map((s) => s.ad);
 
-  // Keyword ads must actually match; keyword-less ads are always eligible.
-  let eligible = scored.filter((s) => (s.hasKeywords ? s.score > 0 : true));
-  if (eligible.length === 0) eligible = scored.filter((s) => !s.hasKeywords);
-  if (eligible.length === 0) return null;
+  void recordAdViews(picked.map((a) => a.id));
+  return picked;
+}
 
-  const max = Math.max(...eligible.map((s) => s.score));
-  const top = eligible.filter((s) => s.score === max);
-  return top[Math.floor(Math.random() * top.length)].ad;
+/** Single most relevant ad (back-compat helper). */
+export async function pickAd(target: AdTarget): Promise<Ad | null> {
+  return (await pickAds(target, 1))[0] ?? null;
 }

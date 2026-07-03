@@ -81,11 +81,12 @@ type ArticleFields = {
  */
 function parseArticleFields(raw: string): ArticleFields {
   const s = stripFences(raw);
+  // Tolerant: models sometimes decorate labels ("**HEADLINE:**", "## HEADLINE:").
   const field = (label: string) => {
-    const m = s.match(new RegExp(`^${label}:[ \\t]*(.*)$`, "mi"));
-    return m ? m[1].trim() : "";
+    const m = s.match(new RegExp(`^[ \\t>#]*\\**${label}\\**[ \\t]*:[ \\t]*(.*)$`, "mi"));
+    return m ? m[1].trim().replace(/^\*+|\*+$/g, "").trim() : "";
   };
-  const bodyMatch = s.match(/^BODY:[ \t]*\n?([\s\S]*)$/im);
+  const bodyMatch = s.match(/^[ \t>#]*\**BODY\**[ \t]*:[ \t]*\n?([\s\S]*)$/im);
   return {
     headline: field("HEADLINE"),
     title_meta: field("TITLE_META"),
@@ -102,8 +103,8 @@ function parseArticleFields(raw: string): ArticleFields {
 /** Parse the Quality & Humanizer agent's VERDICT + BODY output. */
 function parseQualityOutput(raw: string): { verdict: string; body: string } {
   const s = stripFences(raw);
-  const verdictMatch = s.match(/^VERDICT:[ \t]*(.*)$/im);
-  const bodyMatch = s.match(/^BODY:[ \t]*\n?([\s\S]*)$/im);
+  const verdictMatch = s.match(/^[ \t>#]*\**VERDICT\**[ \t]*:[ \t]*(.*)$/im);
+  const bodyMatch = s.match(/^[ \t>#]*\**BODY\**[ \t]*:[ \t]*\n?([\s\S]*)$/im);
   return {
     verdict: verdictMatch ? verdictMatch[1].trim() : "OK",
     body: bodyMatch ? bodyMatch[1].trim() : "",
@@ -365,23 +366,46 @@ export async function runPipeline(
 
     const writerCfg = await getAgentConfig("writer");
     const writerNotes = await getAgentSkillNotes("writer");
-    const written = await runAgentStep("writer", "writing", {
+    const writerPrompt = writerV3Prompt({
+      topic: cand.title,
+      factsBlock,
+      angle: angle.text,
+      minWords,
+      maxWords,
+      tone: general.tone,
+      rules,
+    });
+    let written = await runAgentStep("writer", "writing", {
       system: assembleAgentSystem(SYSTEM_EDITOR, writerCfg, writerNotes),
-      prompt: writerV3Prompt({
-        topic: cand.title,
-        factsBlock,
-        angle: angle.text,
-        minWords,
-        maxWords,
-        tone: general.tone,
-        rules,
-      }),
+      prompt: writerPrompt,
       maxTokens: 8000, // Telugu ≈ 5-6x tokens/word — 2000 was truncating at ~450 words
       temperature: 0.8,
     }, writerCfg);
-    const article = parseArticleFields(written.text);
+    if (written.usedFallback) {
+      await note("ceo", "ceo_to_agent", "fixed",
+        `Writer ka primary model fail hua (${written.primaryError ?? "error"}) — ${written.usedFallback} par chala.`);
+    }
+    let article = parseArticleFields(written.text);
     if (!article.headline || !article.body) {
-      await note("writer", "agent_to_ceo", "failed", "Article likhne me format error aaya.");
+      // One strict-format retry — models occasionally answer in prose/JSON.
+      // Raw snippet goes into the message detail so failures are debuggable.
+      await note("writer", "agent_to_ceo", "fixed",
+        "Output format galat tha — strict format reminder ke saath dobara likhwa raha hoon.",
+        `RAW OUTPUT (first 500 chars):\n${written.text.slice(0, 500)}`);
+      written = await runAgentStep("writer", "writing", {
+        system: assembleAgentSystem(SYSTEM_EDITOR, writerCfg, writerNotes),
+        prompt:
+          writerPrompt +
+          "\n\nCRITICAL REMINDER: respond ONLY in the exact labeled format above (HEADLINE: / TITLE_META: / ... / BODY:). No preamble, no JSON, no markdown fences around the whole answer, no bold labels.",
+        maxTokens: 8000,
+        temperature: 0.6,
+      }, writerCfg);
+      article = parseArticleFields(written.text);
+    }
+    if (!article.headline || !article.body) {
+      await note("writer", "agent_to_ceo", "failed", "Article likhne me format error aaya (retry ke baad bhi).",
+        `RAW OUTPUT (first 500 chars):\n${written.text.slice(0, 500)}`);
+      if (pipeId) void updatePipelineRun(pipeId, { failure_report: { error: "unparseable article", raw: written.text.slice(0, 1500) } });
       throw new Error("Writing step returned an unparseable article");
     }
 

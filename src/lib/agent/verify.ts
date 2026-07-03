@@ -69,11 +69,12 @@ const PASSED: ReviewerOutput = { score: 10, pass: true, issues: [] };
 
 function parseFixerOutput(raw: string, prev: VerifyArticle): VerifyArticle {
   const s = raw.trim().replace(/^```(?:\w+)?|```$/g, "");
+  // Tolerant of decorated labels ("**HEADLINE:**", "## HEADLINE:").
   const field = (label: string) => {
-    const m = s.match(new RegExp(`^${label}:[ \\t]*(.*)$`, "mi"));
-    return m ? m[1].trim() : "";
+    const m = s.match(new RegExp(`^[ \\t>#]*\\**${label}\\**[ \\t]*:[ \\t]*(.*)$`, "mi"));
+    return m ? m[1].trim().replace(/^\*+|\*+$/g, "").trim() : "";
   };
-  const bodyMatch = s.match(/^BODY:[ \t]*\n?([\s\S]*)$/im);
+  const bodyMatch = s.match(/^[ \t>#]*\**BODY\**[ \t]*:[ \t]*\n?([\s\S]*)$/im);
   const body = bodyMatch ? bodyMatch[1].trim() : "";
   return {
     headline: field("HEADLINE") || prev.headline,
