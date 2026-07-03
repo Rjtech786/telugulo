@@ -1,15 +1,21 @@
 import { pickAds, type Ad, type AdTarget } from "@/lib/ads";
+import { AdImageCarousel } from "@/components/ad-image-carousel";
 
 /**
  * House-ad rendering. `AdCard` is the pure renderer (card = compact
- * horizontal, banner = full-width). `AdSlot` picks + renders one ad for a
- * page. Article pages pick 2 ads themselves via pickAds() so the mid-article
- * and end slots never race each other.
+ * horizontal, banner = full-width); both auto-rotate through `ad.images`
+ * like a Google Display-style carousel when there's more than one. `AdSlot`
+ * picks + renders ads of one type for a page.
  */
+
+function adImages(ad: Ad): string[] {
+  return ad.images?.length ? ad.images : ad.image_url ? [ad.image_url] : [];
+}
 
 export function AdCard({ ad, variant = "card" }: { ad: Ad; variant?: "card" | "banner" }) {
   const headline = ad.headline || ad.title || "";
   const cta = ad.cta || "చూడండి";
+  const images = adImages(ad);
 
   if (variant === "banner") {
     return (
@@ -20,12 +26,12 @@ export function AdCard({ ad, variant = "card" }: { ad: Ad; variant?: "card" | "b
         className="group block overflow-hidden rounded-2xl border border-line bg-gradient-to-r from-white to-surface transition hover:shadow-[0_10px_30px_rgba(0,0,0,0.09)]"
       >
         <div className="flex items-stretch gap-4">
-          {ad.image_url && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={ad.image_url}
+          {images.length > 0 && (
+            <AdImageCarousel
+              images={images}
               alt={headline}
-              className="h-[110px] w-[150px] flex-none object-cover transition-transform duration-300 group-hover:scale-105 sm:h-[130px] sm:w-[220px]"
+              className="h-[110px] w-[150px] flex-none sm:h-[130px] sm:w-[220px]"
+              imgClassName="transition-transform duration-300 group-hover:scale-105"
             />
           )}
           <div className="min-w-0 flex-1 self-center py-3 pr-4">
@@ -57,12 +63,11 @@ export function AdCard({ ad, variant = "card" }: { ad: Ad; variant?: "card" | "b
       className="block overflow-hidden rounded-2xl border border-line bg-white transition hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)]"
     >
       <div className="flex items-stretch gap-3">
-        {ad.image_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={ad.image_url}
+        {images.length > 0 && (
+          <AdImageCarousel
+            images={images}
             alt={headline}
-            className="h-[96px] w-[120px] flex-none object-cover sm:h-[104px] sm:w-[150px]"
+            className="h-[96px] w-[120px] flex-none sm:h-[104px] sm:w-[150px]"
           />
         )}
         <div className="min-w-0 flex-1 py-3 pr-3">
@@ -86,15 +91,17 @@ export function AdCard({ ad, variant = "card" }: { ad: Ad; variant?: "card" | "b
   );
 }
 
-/** Picks + renders one ad; renders nothing when no active ads exist. */
+/** Picks + renders one ad of `type`; renders nothing when none are active. */
 export async function AdSlot({
   target,
   variant = "card",
+  type = "card",
 }: {
   target: AdTarget;
   variant?: "card" | "banner";
+  type?: "card" | "banner";
 }) {
-  const [ad] = await pickAds(target, 1);
+  const [ad] = await pickAds(target, 1, type);
   if (!ad) return null;
   return <AdCard ad={ad} variant={variant} />;
 }

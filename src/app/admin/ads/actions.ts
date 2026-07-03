@@ -4,12 +4,19 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import {
   createAd,
+  updateAd,
   setAdActive,
   deleteAd,
   composeAdCopy,
+  composeAdCopyVision,
+  enhanceAdImage,
+  getAdAnalytics,
   type AdCopy,
+  type AdAnalytics,
 } from "@/lib/ads";
 import { storeAdImage } from "@/lib/storage";
+import { getAdsSettings, setAdsSettings } from "@/lib/settings";
+import type { AdType, AdsSettings } from "@/lib/config";
 
 /** Upload an ad image file → returns its public Storage URL. */
 export async function uploadAdImage(formData: FormData): Promise<{ url: string }> {
@@ -29,6 +36,14 @@ export async function uploadAdImage(formData: FormData): Promise<{ url: string }
   return { url };
 }
 
+/** AI-enhance an already-uploaded image into a more attractive creative. */
+export async function enhanceImage(url: string): Promise<{ url: string }> {
+  await requireAdmin();
+  const { bytes, contentType } = await enhanceAdImage(url);
+  const newUrl = await storeAdImage(bytes, contentType);
+  return { url: newUrl };
+}
+
 function parseKeywords(raw: string): string[] {
   return raw
     .split(/[,\n]/)
@@ -37,24 +52,25 @@ function parseKeywords(raw: string): string[] {
     .slice(0, 12);
 }
 
-/** AI: turn image+link+keywords into ad copy (for the form preview). */
+/** AI: turn image(s)+link+keywords into ad copy (for the form preview). */
 export async function generateAdCopy(input: {
   title: string;
   link: string;
   keywords: string;
+  images: string[];
 }): Promise<AdCopy> {
   await requireAdmin();
   if (!input.link.trim()) throw new Error("Add a link first");
-  return composeAdCopy({
-    title: input.title.trim(),
-    link: input.link.trim(),
-    keywords: parseKeywords(input.keywords),
-  });
+  const opts = { title: input.title.trim(), keywords: parseKeywords(input.keywords), link: input.link.trim() };
+  return input.images.length > 0
+    ? composeAdCopyVision({ ...opts, images: input.images })
+    : composeAdCopy(opts);
 }
 
 export async function addAd(fields: {
   title: string;
-  image_url: string;
+  images: string[];
+  type: AdType;
   link: string;
   category: string;
   keywords: string;
@@ -64,6 +80,7 @@ export async function addAd(fields: {
 }) {
   await requireAdmin();
   if (!fields.link.trim()) throw new Error("A link is required");
+  if (fields.images.length === 0) throw new Error("Add at least one image");
 
   const keywords = parseKeywords(fields.keywords);
 
@@ -74,12 +91,18 @@ export async function addAd(fields: {
     cta: fields.cta.trim(),
   };
   if (!copy.headline) {
-    copy = await composeAdCopy({ title: fields.title.trim(), link: fields.link.trim(), keywords });
+    copy = await composeAdCopyVision({
+      title: fields.title.trim(),
+      link: fields.link.trim(),
+      keywords,
+      images: fields.images,
+    });
   }
 
   await createAd({
     title: fields.title.trim() || copy.headline,
-    image_url: fields.image_url.trim(),
+    images: fields.images,
+    type: fields.type,
     link: fields.link.trim(),
     category: fields.category.trim(),
     keywords,
@@ -104,4 +127,28 @@ export async function removeAd(id: string) {
   await deleteAd(id);
   revalidatePath("/admin/ads");
   revalidatePath("/", "layout");
+}
+
+export async function updateAdType(id: string, type: AdType) {
+  await requireAdmin();
+  await updateAd(id, { type });
+  revalidatePath("/admin/ads");
+  revalidatePath("/", "layout");
+}
+
+export async function getAdsAnalyticsAction(): Promise<AdAnalytics> {
+  await requireAdmin();
+  return getAdAnalytics(14);
+}
+
+export async function getAdsSettingsAction(): Promise<AdsSettings> {
+  await requireAdmin();
+  return getAdsSettings();
+}
+
+export async function saveAdsSettingsAction(input: AdsSettings): Promise<AdsSettings> {
+  await requireAdmin();
+  const next = await setAdsSettings(input);
+  revalidatePath("/", "layout");
+  return next;
 }

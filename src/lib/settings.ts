@@ -8,6 +8,7 @@ import {
   DEFAULT_SITE_SETTINGS,
   DEFAULT_RESEARCH,
   DEFAULT_QUALITY,
+  DEFAULT_ADS_SETTINGS,
   SOCIAL_KEYS,
   SETTINGS_KEYS,
   type StepKey,
@@ -20,6 +21,7 @@ import {
   type SiteSettings,
   type ResearchSettings,
   type QualityRules,
+  type AdsSettings,
 } from "@/lib/config";
 import { WRITING_RULES } from "@/lib/agent/prompts";
 
@@ -165,6 +167,29 @@ export async function getCost(): Promise<CostSettings> {
     SETTINGS_KEYS.cost,
   )) ?? {};
   return { ...DEFAULT_COST, ...saved };
+}
+
+/** Ads settings — currently just the popup delay (owner-configurable). */
+export async function getAdsSettings(): Promise<AdsSettings> {
+  const saved = (await readSetting<Partial<AdsSettings>>(SETTINGS_KEYS.ads)) ?? {};
+  const delay = Number(saved.popup_delay_seconds);
+  return {
+    popup_delay_seconds: Number.isFinite(delay)
+      ? Math.min(120, Math.max(0, delay))
+      : DEFAULT_ADS_SETTINGS.popup_delay_seconds,
+  };
+}
+
+export async function setAdsSettings(input: Partial<AdsSettings>): Promise<AdsSettings> {
+  const current = await getAdsSettings();
+  const next: AdsSettings = {
+    popup_delay_seconds:
+      input.popup_delay_seconds != null
+        ? Math.min(120, Math.max(0, Number(input.popup_delay_seconds)))
+        : current.popup_delay_seconds,
+  };
+  await writeSetting(SETTINGS_KEYS.ads, next);
+  return next;
 }
 
 /** Last-run tracking for the weekly/monthly Performance agent job. */

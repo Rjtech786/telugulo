@@ -33,6 +33,17 @@ export const TEXT_MODELS: Record<
   ],
 };
 
+// ─── Ad types + settings ───
+export type AdType = "card" | "banner" | "popup";
+export const AD_TYPES: { id: AdType; label: string; hint: string }[] = [
+  { id: "card", label: "Card", hint: "Article ke beech/end me chhota inline card" },
+  { id: "banner", label: "Banner", hint: "Homepage/category ke top pe bada horizontal banner" },
+  { id: "popup", label: "Popup", hint: "Delay ke baad modal popup, session me sirf 1 baar" },
+];
+
+export type AdsSettings = { popup_delay_seconds: number };
+export const DEFAULT_ADS_SETTINGS: AdsSettings = { popup_delay_seconds: 5 };
+
 // ─── Image AI providers ───
 export type ImageProvider = "imagen" | "dalle";
 export const IMAGE_PROVIDERS: { id: ImageProvider; label: string }[] = [
@@ -286,4 +297,5 @@ export const SETTINGS_KEYS = {
   research: "research_settings",
   quality: "quality_rules",
   performanceState: "performance_state",
+  ads: "ads_settings",
 } as const;

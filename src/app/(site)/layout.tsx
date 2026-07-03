@@ -1,10 +1,17 @@
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
-import { getSiteSettings, socialsArray } from "@/lib/settings";
+import { PopupAd } from "@/components/popup-ad";
+import { getSiteSettings, socialsArray, getAdsSettings } from "@/lib/settings";
 import { listPages } from "@/lib/pages";
+import { pickPopupAd } from "@/lib/ads";
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
-  const [site, pages] = await Promise.all([getSiteSettings(), listPages()]);
+  const [site, pages, popupAd, adsSettings] = await Promise.all([
+    getSiteSettings(),
+    listPages(),
+    pickPopupAd(),
+    getAdsSettings(),
+  ]);
   const socials = socialsArray(site);
 
   return (
@@ -17,6 +24,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         socials={socials}
         pages={pages.map((p) => ({ slug: p.slug, title: p.title }))}
       />
+      <PopupAd ad={popupAd} delaySeconds={adsSettings.popup_delay_seconds} />
     </div>
   );
 }
