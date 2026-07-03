@@ -130,6 +130,10 @@ async function getDefaultAuthorId(): Promise<string> {
 
 const wordCount = (s: string) => s.split(/\s+/).filter(Boolean).length;
 
+/** House style: standard digits only — convert Telugu numerals (౨౦౨౬ → 2026). */
+const normalizeDigits = (s: string) =>
+  s.replace(/[౦-౯]/g, (d) => String(d.charCodeAt(0) - 0x0c66));
+
 /**
  * V3 daily newsroom pipeline ("Verify Mode", NEWSROOM_V3_SPEC):
  *   Stage 1 Topic Scout + Duplicate Guard → Stage 2 Researcher (facts table)
@@ -203,7 +207,14 @@ export async function runPipeline(
         stage_logs: stageLogs,
       });
     }
-    const runStatus = finalStatus === "published" ? "created" : finalStatus === "error" ? "error" : "skipped";
+    const runStatus =
+      finalStatus === "published"
+        ? "created"
+        : finalStatus === "error"
+          ? "error"
+          : finalStatus === "draft_failed"
+            ? "draft" // article bana lekin gate fail — "Skip" se alag dikhna chahiye
+            : "skipped";
     await finishRun(runId, runStatus, {
       articleId: extra.articleId,
       articleTitle: extra.articleTitle,
@@ -408,6 +419,11 @@ export async function runPipeline(
       if (pipeId) void updatePipelineRun(pipeId, { failure_report: { error: "unparseable article", raw: written.text.slice(0, 1500) } });
       throw new Error("Writing step returned an unparseable article");
     }
+    article.headline = normalizeDigits(article.headline);
+    article.title_meta = normalizeDigits(article.title_meta);
+    article.meta_description = normalizeDigits(article.meta_description);
+    article.summary = normalizeDigits(article.summary);
+    article.body = normalizeDigits(article.body);
 
     // Code-side word-count enforcement (never trust the LLM's count).
     let words = wordCount(article.body);
@@ -491,6 +507,7 @@ export async function runPipeline(
         await note((agent ?? "ceo") as AgentId, agent ? "agent_to_ceo" : "ceo_to_agent", status ?? "working", msg);
       },
       minWords,
+      rules,
     );
     body = insertInternalLinks(verify.article.body, verify.internalLinks);
 
@@ -757,6 +774,7 @@ export async function reverifyArticle(
         await note((agent ?? "ceo") as AgentId, agent ? "agent_to_ceo" : "ceo_to_agent", status ?? "working", msg);
       },
       minWords,
+      await getAgentInstructions(),
     );
     const body = insertInternalLinks(verify.article.body, verify.internalLinks);
     if (pipeId) void updatePipelineRun(pipeId, { reviewer_scores: { ...verify.scores, loops: verify.loops } });
@@ -818,7 +836,7 @@ export async function reverifyArticle(
         ...(failure !== undefined ? { failure_report: failure } : {}),
       });
     }
-    await finishRun(runId, publishNow ? "created" : "skipped", {
+    await finishRun(runId, publishNow ? "created" : "draft", {
       articleId,
       articleTitle: verify.article.headline,
       reason: publishNow ? undefined : "re-verify failed — still a draft",

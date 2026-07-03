@@ -337,6 +337,7 @@ HARD RULES:
 - NO internal links — do not add any links; linking is another agent's job.
 - Target ${opts.minWords}-${opts.maxWords} words. If the facts table is too thin, write 500-${opts.minWords - 1} tight words and set FLAG_SHORT: true with the reason.
 - 2-3 short Telugu "## subheadings"; ONE **bold** key fact; varied sentence length.
+- DIGITS: always standard 0-9 (2026, 8,000) — NEVER Telugu numerals (౨౦౨౬, ౮,౦౦౦).
 
 Respond in EXACTLY this format (first fields single-line plain text, BODY last):
 HEADLINE: <clean declarative Telugu headline, entities included, no clickbait>
@@ -366,7 +367,7 @@ Weave the facts into the existing sections naturally (hybrid Telugu, keep the ##
 
 const REVIEWER_JSON = `Respond ONLY with JSON (no markdown):
 {"score": 0-10, "pass": true|false, "issues": [{"severity":"critical|major|minor","location":"<quoted sentence or section>","problem":"...","suggested_fix":"..."}]}
-pass=true only if there are NO critical issues and score >= 8.`;
+SCORING CALIBRATION: 10 = flawless, 8 = publishable (the DEFAULT for a good article — minor nitpicks must NOT push the score below 8), below 8 ONLY when there are problems a real editor would refuse to publish. pass=true when there are NO critical issues.`;
 
 /** Verify Mode reviewer 1 — Fact Checker. */
 export function factCheckerPrompt(body: string, headline: string, factsBlock: string): string {
@@ -394,8 +395,10 @@ export function languageEditorPrompt(
         .join("\n")}\n`
     : "";
   return `You are the LANGUAGE EDITOR for telugulo.in. Go through this Telugu article sentence by sentence. For each sentence ask: "Would an ordinary Telugu speaker say this aloud naturally?"
+
+HOUSE STYLE (CRITICAL — read first): telugulo.in writes HYBRID Telugu. English tech/business loanwords — in Latin script or Telugu script (ఫీచర్లు, డెవలపర్లు, ప్రోగ్రామ్, యాప్, టూల్స్, అప్డేట్, ఏజెంట్, టౌన్ హాల్, ఆప్టిన్/opt-in, ప్లాట్‌ఫామ్...) — are CORRECT and must NOT be flagged. NEVER suggest textbook/Sanskrit Telugu replacements (లక్షణాలు, పాఠ్యక్రమం, అభివృద్ధి కర్తలు, ప్రతినిధులు, అంతర్జాలం...). The problem you hunt for is the OPPOSITE: textbook/literary Telugu where spoken Telugu or an English word is natural.
 ${banned}
-Flag: machine-translation nonsense words, broken grammar, textbook/Sanskrit-heavy Telugu where spoken Telugu or English is natural (వేదిక→platform, కృత్రిమ మేధ→AI, అంతర్జాలం→internet), spelling errors, inconsistent transliteration of the same proper noun, uniform sentence lengths, repeated points.
+Flag ONLY: machine-translation nonsense words, broken grammar, textbook/Sanskrit-heavy Telugu where spoken Telugu or English is natural (వేదిక→platform, కృత్రిమ మేధ→AI, అంతర్జాలం→internet), spelling errors, Telugu-script numerals (౨౦౨౬ → 2026), inconsistent transliteration of the same proper noun, uniform sentence lengths, repeated points.
 
 ARTICLE:
 ${body}

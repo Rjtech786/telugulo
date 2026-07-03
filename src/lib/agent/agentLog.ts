@@ -24,7 +24,7 @@ export type AgentId =
 
 export type MsgDirection = "ceo_to_agent" | "agent_to_ceo";
 export type MsgStatus = "working" | "done" | "fixed" | "failed";
-export type RunStatus = "running" | "created" | "skipped" | "error";
+export type RunStatus = "running" | "created" | "skipped" | "error" | "draft";
 export type RunTrigger = "cron" | "manual";
 
 export type AgentRun = {

@@ -26,7 +26,7 @@ import type { AgentConfig } from "@/lib/agent/agentConfigs";
 type AgentRun = {
   id: string;
   trigger: "cron" | "manual";
-  status: "running" | "created" | "skipped" | "error";
+  status: "running" | "created" | "skipped" | "error" | "draft";
   article_id: string | null;
   article_title: string | null;
   reason: string | null;
@@ -138,6 +138,7 @@ function duration(run: AgentRun): string {
 const RUN_BADGE: Record<AgentRun["status"], { cls: string; text: string }> = {
   running: { cls: "bg-indigo-500/20 text-indigo-300 border-indigo-400/30", text: "Chal raha hai" },
   created: { cls: "bg-green-500/15 text-green-300 border-green-400/30", text: "Published" },
+  draft: { cls: "bg-amber-500/15 text-amber-300 border-amber-400/30", text: "Draft (verify fail)" },
   skipped: { cls: "bg-slate-500/20 text-slate-300 border-slate-400/20", text: "Skip" },
   error: { cls: "bg-red-500/15 text-red-300 border-red-400/30", text: "Error" },
 };

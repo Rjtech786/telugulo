@@ -107,8 +107,13 @@ export async function runVerifyMode(
   candidates: { title: string; slug: string }[],
   note: (msg: string, agent?: "fact_checker" | "language_editor" | "discover_checker" | "fixer", status?: "working" | "done" | "fixed" | "failed") => Promise<void>,
   minWords = 600,
+  sharedRules = "",
   maxLoops = 3,
 ): Promise<VerifyResult> {
+  // Reviewers must judge against the house style (hybrid Telugu etc.) — not
+  // their own idea of "proper" Telugu.
+  const reviewerBase = (role: string) =>
+    `${sharedRules ? `NEWSROOM HOUSE RULES (judge against THESE):\n${sharedRules}\n\n` : ""}${role}`;
   let article = { ...input };
   let lastLinks: { slug: string; anchor: string }[] = [];
   let lastIssues: ReviewerIssue[] = [];
@@ -134,7 +139,7 @@ export async function runVerifyMode(
       factCfg?.enabled === false
         ? Promise.resolve(PASSED)
         : runAgentStep("fact_checker", "fact_check", {
-            system: assembleAgentSystem("You review strictly and reply with exact JSON.", factCfg, factNotes),
+            system: assembleAgentSystem(reviewerBase("You review strictly and reply with exact JSON."), factCfg, factNotes),
             prompt: factCheckerPrompt(article.body, article.headline, factsBlock),
             maxTokens: 4000, // long Telugu quotes in issue JSON — 2000 was truncating (parse fail → score 0)
             temperature: 0,
@@ -142,7 +147,7 @@ export async function runVerifyMode(
       langCfg?.enabled === false
         ? Promise.resolve(PASSED)
         : runAgentStep("language_editor", "language_edit", {
-            system: assembleAgentSystem("You review Telugu strictly and reply with exact JSON.", langCfg, langNotes),
+            system: assembleAgentSystem(reviewerBase("You review Telugu strictly and reply with exact JSON."), langCfg, langNotes),
             prompt: languageEditorPrompt(article.body, banned),
             maxTokens: 4000,
             temperature: 0,
@@ -150,7 +155,7 @@ export async function runVerifyMode(
       discCfg?.enabled === false
         ? Promise.resolve(PASSED)
         : runAgentStep("discover_checker", "discover_check", {
-            system: assembleAgentSystem("You review for Google Discover strictly and reply with exact JSON.", discCfg, discNotes),
+            system: assembleAgentSystem(reviewerBase("You review for Google Discover strictly and reply with exact JSON."), discCfg, discNotes),
             prompt: discoverCheckerPrompt({
               headline: article.headline,
               meta_description: article.meta_description,
@@ -180,7 +185,10 @@ export async function runVerifyMode(
       allIssues.length ? "fixed" : "done",
     );
 
-    if (fact.pass && lang.pass && disc.pass && avg >= 8) {
+    // Gate: average >= 8 AND zero critical issues. (Per-reviewer pass flags
+    // double-penalized style nitpicks and made the gate nearly impassable.)
+    const noCritical = allIssues.every((i) => i.severity !== "critical");
+    if (avg >= 8 && noCritical) {
       return { passed: true, loops: loop, scores, issues: [], article, internalLinks: lastLinks };
     }
     if (loop === maxLoops) break;
@@ -190,7 +198,7 @@ export async function runVerifyMode(
     await note(`Fixer ko ${allIssues.length} issues ke saath bhej raha hoon.`, "fixer", "working");
     try {
       const fixed = await runAgentStep("fixer", "fixer", {
-        system: assembleAgentSystem("You fix articles precisely without adding unsupported facts.", fixCfg, await getAgentSkillNotes("fixer")),
+        system: assembleAgentSystem(reviewerBase("You fix articles precisely without adding unsupported facts."), fixCfg, await getAgentSkillNotes("fixer")),
         prompt: fixerPrompt({ ...article, factsBlock, issues: allIssues, minWords }),
         maxTokens: 8000,
         temperature: 0.3,
