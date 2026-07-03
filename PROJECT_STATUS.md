@@ -260,7 +260,7 @@ unchanged (always draft).
 - **Domain:** telugulo.in on **Cloudflare** (moved from Hostinger registrar). Apex A + `www` CNAME → `13.233.164.196`
 - **Security Group:** ports 22, 80, 443 open
 - **Env:** `.env.production` on EC2 (⚠️ **same ENCRYPTION_KEY as local** so encrypted keys decrypt)
-- **Daily cron:** `30 2 * * * /home/ubuntu/telugulo-cron.sh` (8 AM IST; EC2 is UTC) → POSTs `http://127.0.0.1:3000/api/cron/generate/` (script reads CRON_SECRET at runtime)
+- **Daily cron:** `*/30 * * * * /home/ubuntu/telugulo-cron.sh` (checks every 30 min) → POSTs `http://127.0.0.1:3000/api/cron/generate/`. The endpoint self-gates: it only actually runs inside the owner-set `general.publish_time` IST window (Mission Control → Newsroom strip), once per day (agent_runs guard). `?force=1` bypasses the schedule (not the once-a-day guard).
 
 ## 10. Common tasks
 **Run locally:** `cd telugulo-next && npm run dev` → http://localhost:3000
@@ -273,7 +273,7 @@ ssh -i MYPROJECT.pem ubuntu@ec2-13-233-164-196...   # then:
 cd telugulo-next && git pull && npm run build && pm2 reload telugulo-next --update-env
 ```
 (`npm install` only needed when deps change. `--update-env` re-reads `.env.production`.)
-**Trigger generation now (on EC2):** `bash ~/telugulo-cron.sh`  (cost ~₹6-8)
+**Trigger generation now (on EC2):** `curl -X POST "http://127.0.0.1:3000/api/cron/generate/?force=1" -H "Authorization: Bearer $CRON_SECRET"` — plain `bash ~/telugulo-cron.sh` will report "Not scheduled time yet" outside the publish window (cost ~₹6-8)
 **PM2:** `pm2 status` · `pm2 logs telugulo-next` · `pm2 reload telugulo-next`
 
 ## 11. Gotchas / important fixes (don't re-break these)
