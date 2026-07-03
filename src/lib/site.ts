@@ -75,14 +75,21 @@ export function formatAdmin(iso: string | null): string {
 /** Date + time in IST — shown on article pages (publish time helps news SEO). */
 export function formatDateTime(iso: string | null): string {
   if (!iso) return "";
-  const s = new Date(iso).toLocaleString("te-IN", {
+  const d = new Date(iso);
+  const datePart = d.toLocaleDateString("te-IN", {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: "Asia/Kolkata",
+  });
+  const parts = new Intl.DateTimeFormat("en-US", {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
     timeZone: "Asia/Kolkata",
-  });
-  return `${s} IST`;
+  }).formatToParts(d);
+  const hour = parts.find((p) => p.type === "hour")?.value ?? "";
+  const minute = parts.find((p) => p.type === "minute")?.value ?? "";
+  const period = (parts.find((p) => p.type === "dayPeriod")?.value ?? "").charAt(0).toLowerCase();
+  return `${datePart} · ${hour}:${minute}${period}m`;
 }

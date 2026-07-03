@@ -169,13 +169,13 @@ export default async function ArticlePage({
           <time dateTime={a.published_at ?? undefined}>
             {formatDateTime(a.published_at)}
           </time>
-          <span className="block text-ink-mute">
-            {readMins(a.body)} నిమి చదవండి
-            {a.updated_at &&
-              a.published_at &&
-              new Date(a.updated_at).getTime() - new Date(a.published_at).getTime() >
-                120000 && <> · నవీకరించబడింది {formatDate(a.updated_at)}</>}
-          </span>
+          {a.updated_at &&
+            a.published_at &&
+            new Date(a.updated_at).getTime() - new Date(a.published_at).getTime() > 120000 && (
+              <span className="block text-ink-mute">
+                నవీకరించబడింది {formatDate(a.updated_at)}
+              </span>
+            )}
         </span>
       </div>
 
@@ -256,12 +256,6 @@ export default async function ArticlePage({
       )}
     </article>
   );
-}
-
-/** Rough read-time: ~180 Telugu words/min. */
-function readMins(body: string | null): number {
-  if (!body) return 1;
-  return Math.max(1, Math.round(body.split(/\s+/).length / 180));
 }
 
 /**
