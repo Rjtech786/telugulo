@@ -44,6 +44,18 @@ export const AD_TYPES: { id: AdType; label: string; hint: string }[] = [
 export type AdsSettings = { popup_delay_seconds: number };
 export const DEFAULT_ADS_SETTINGS: AdsSettings = { popup_delay_seconds: 5 };
 
+// ─── Article page layout toggles (owner-controlled) ───
+export type ArticleLayoutSettings = {
+  show_toc: boolean;
+  show_sources: boolean;
+  show_related: boolean;
+};
+export const DEFAULT_ARTICLE_LAYOUT: ArticleLayoutSettings = {
+  show_toc: true,
+  show_sources: true,
+  show_related: true,
+};
+
 // ─── Image AI providers ───
 export type ImageProvider = "imagen" | "dalle";
 export const IMAGE_PROVIDERS: { id: ImageProvider; label: string }[] = [
@@ -298,4 +310,5 @@ export const SETTINGS_KEYS = {
   quality: "quality_rules",
   performanceState: "performance_state",
   ads: "ads_settings",
+  articleLayout: "article_layout_settings",
 } as const;

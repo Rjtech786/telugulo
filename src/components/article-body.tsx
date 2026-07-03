@@ -7,6 +7,9 @@ import remarkGfm from "remark-gfm";
  * first paragraph gets a larger "lead" treatment.
  */
 export function ArticleBody({ body, lead = true }: { body: string; lead?: boolean }) {
+  // Sequential ids matching extractHeadings() in lib/article-toc.ts, so the
+  // Table of Contents can #anchor-link straight to these headings.
+  let headingIndex = 0;
   return (
     <div
       className={
@@ -20,12 +23,18 @@ export function ArticleBody({ body, lead = true }: { body: string; lead?: boolea
         remarkPlugins={[remarkGfm]}
         components={{
           h2: ({ children }) => (
-            <h2 className="mb-3 mt-9 font-serif text-[24px] font-bold leading-snug text-ink">
+            <h2
+              id={`heading-${headingIndex++}`}
+              className="mb-3 mt-9 scroll-mt-24 font-serif text-[24px] font-bold leading-snug text-ink"
+            >
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="mb-2 mt-7 font-serif text-[20px] font-bold leading-snug text-ink">
+            <h3
+              id={`heading-${headingIndex++}`}
+              className="mb-2 mt-7 scroll-mt-24 font-serif text-[20px] font-bold leading-snug text-ink"
+            >
               {children}
             </h3>
           ),

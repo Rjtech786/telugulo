@@ -32,6 +32,7 @@ import { notifyDraft } from "./telegram";
 import { createRun, logMessage, finishRun, type RunTrigger, type AgentId } from "./agentLog";
 import { buildFactsTable, renderFactsForPrompt, factEntities, type FactsTable } from "./factsTable";
 import { runVerifyMode, insertInternalLinks } from "./verify";
+import { stripInlineSourcesSection } from "@/lib/article-toc";
 import { runHardValidators, checkDuplicate } from "./validators";
 import { createPipelineRun, updatePipelineRun, type StageLog, type FinalStatus } from "./pipelineRuns";
 import { getAgentConfig, getAgentSkillNotes, assembleAgentSystem, runAgentStep } from "./agentConfigs";
@@ -509,7 +510,7 @@ export async function runPipeline(
       minWords,
       rules,
     );
-    body = insertInternalLinks(verify.article.body, verify.internalLinks);
+    body = stripInlineSourcesSection(insertInternalLinks(verify.article.body, verify.internalLinks));
 
     // Fixer rewrites can shrink the body below the word floor — re-expand
     // once from unused facts before the hard validators get the final say.
@@ -776,7 +777,7 @@ export async function reverifyArticle(
       minWords,
       await getAgentInstructions(),
     );
-    const body = insertInternalLinks(verify.article.body, verify.internalLinks);
+    const body = stripInlineSourcesSection(insertInternalLinks(verify.article.body, verify.internalLinks));
     if (pipeId) void updatePipelineRun(pipeId, { reviewer_scores: { ...verify.scores, loops: verify.loops } });
     stageLogs.push({ stage: "verify", summary: `${verify.passed ? "PASSED" : "FAILED"} — fact=${verify.scores.fact} lang=${verify.scores.language} discover=${verify.scores.discover}` });
 

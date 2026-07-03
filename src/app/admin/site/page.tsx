@@ -1,10 +1,13 @@
-import { getSiteSettings } from "@/lib/settings";
+import { getSiteSettings, getArticleLayoutSettings } from "@/lib/settings";
 import { SiteSettingsForm } from "./SiteSettingsForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function SiteSettingsPage() {
-  const initial = await getSiteSettings();
+  const [initial, articleLayout] = await Promise.all([
+    getSiteSettings(),
+    getArticleLayoutSettings(),
+  ]);
   return (
     <div className="space-y-6">
       <div>
@@ -13,7 +16,7 @@ export default async function SiteSettingsPage() {
           Public identity &amp; social links — changes go live on the site in a few seconds.
         </p>
       </div>
-      <SiteSettingsForm initial={initial} />
+      <SiteSettingsForm initial={initial} initialArticleLayout={articleLayout} />
     </div>
   );
 }

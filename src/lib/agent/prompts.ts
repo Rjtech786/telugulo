@@ -335,6 +335,7 @@ HARD RULES:
 - ONLY facts from the FACTS TABLE. Every paragraph must trace to at least one fact.
 - Quotes: translate faithfully; if a quote breaks in literal Telugu, paraphrase + attribute ("అని చెప్పారు") instead.
 - NO internal links — do not add any links; linking is another agent's job.
+- NO "Sources"/"మూలాలు" section or source list anywhere in the body — the site already shows a separate Sources block automatically. Just write the article and stop at ENDING_SENTENCE.
 - Target ${opts.minWords}-${opts.maxWords} words. If the facts table is too thin, write 500-${opts.minWords - 1} tight words and set FLAG_SHORT: true with the reason.
 - 2-3 short Telugu "## subheadings"; ONE **bold** key fact; varied sentence length.
 - DIGITS: always standard 0-9 (2026, 8,000) — NEVER Telugu numerals (౨౦౨౬, ౮,౦౦౦).
@@ -450,7 +451,7 @@ export function fixerPrompt(input: {
   issues: { severity: string; location: string; problem: string; suggested_fix: string }[];
   minWords?: number;
 }): string {
-  return `You are the FIXER for telugulo.in. Reviewers found these issues — fix ALL of them by rewriting the affected sentences fully (natural flow, not patches). NEVER add a fact that is not in the facts table.
+  return `You are the FIXER for telugulo.in. Reviewers found these issues — fix ALL of them by rewriting the affected sentences fully (natural flow, not patches). NEVER add a fact that is not in the facts table. NEVER add a "Sources"/"మూలాలు" section or source list to the body — the site already shows one separately; remove it if it's already there.
 ${input.minWords ? `\nLENGTH RULE (HARD): the corrected BODY must stay AT OR ABOVE ${input.minWords} words. Fix by REWRITING sentences, not deleting them — if you must remove an unsupported claim, replace it with supported material from the facts table so the length holds.\n` : ""}
 
 ${input.factsBlock}

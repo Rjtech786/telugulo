@@ -2,12 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
-import { writeSetting } from "@/lib/settings";
+import { writeSetting, setArticleLayoutSettings } from "@/lib/settings";
 import {
   SETTINGS_KEYS,
   SOCIAL_KEYS,
   DEFAULT_SITE_SETTINGS,
   type SiteSettings,
+  type ArticleLayoutSettings,
 } from "@/lib/config";
 
 export async function saveSiteSettings(input: SiteSettings) {
@@ -34,4 +35,12 @@ export async function saveSiteSettings(input: SiteSettings) {
   revalidatePath("/", "layout");
   revalidatePath("/admin/site");
   return { ok: true };
+}
+
+export async function saveArticleLayout(input: Partial<ArticleLayoutSettings>) {
+  await requireAdmin();
+  const next = await setArticleLayoutSettings(input);
+  revalidatePath("/", "layout");
+  revalidatePath("/admin/site");
+  return next;
 }

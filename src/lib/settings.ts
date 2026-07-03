@@ -9,6 +9,7 @@ import {
   DEFAULT_RESEARCH,
   DEFAULT_QUALITY,
   DEFAULT_ADS_SETTINGS,
+  DEFAULT_ARTICLE_LAYOUT,
   SOCIAL_KEYS,
   SETTINGS_KEYS,
   type StepKey,
@@ -22,6 +23,7 @@ import {
   type ResearchSettings,
   type QualityRules,
   type AdsSettings,
+  type ArticleLayoutSettings,
 } from "@/lib/config";
 import { WRITING_RULES } from "@/lib/agent/prompts";
 
@@ -189,6 +191,25 @@ export async function setAdsSettings(input: Partial<AdsSettings>): Promise<AdsSe
         : current.popup_delay_seconds,
   };
   await writeSetting(SETTINGS_KEYS.ads, next);
+  return next;
+}
+
+/** Article page layout toggles (TOC / Sources / Related articles). */
+export async function getArticleLayoutSettings(): Promise<ArticleLayoutSettings> {
+  const saved = (await readSetting<Partial<ArticleLayoutSettings>>(SETTINGS_KEYS.articleLayout)) ?? {};
+  return { ...DEFAULT_ARTICLE_LAYOUT, ...saved };
+}
+
+export async function setArticleLayoutSettings(
+  input: Partial<ArticleLayoutSettings>,
+): Promise<ArticleLayoutSettings> {
+  const current = await getArticleLayoutSettings();
+  const next: ArticleLayoutSettings = {
+    show_toc: input.show_toc ?? current.show_toc,
+    show_sources: input.show_sources ?? current.show_sources,
+    show_related: input.show_related ?? current.show_related,
+  };
+  await writeSetting(SETTINGS_KEYS.articleLayout, next);
   return next;
 }
 

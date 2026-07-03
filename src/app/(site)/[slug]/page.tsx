@@ -3,7 +3,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPublishedBySlug, getAuthor, listPublished, listRelated } from "@/lib/public";
 import { pickAds } from "@/lib/ads";
+import { getArticleLayoutSettings } from "@/lib/settings";
+import { stripInlineSourcesSection, extractHeadings } from "@/lib/article-toc";
 import { ArticleBody } from "@/components/article-body";
+import { TableOfContents } from "@/components/table-of-contents";
 import { ReadingProgress } from "@/components/reading-progress";
 import { ShareBar } from "@/components/share-bar";
 import { ViewPing } from "@/components/view-ping";
@@ -62,13 +65,15 @@ export default async function ArticlePage({
   const a = await getPublishedBySlug(slug);
   if (!a) notFound();
 
-  const author = a.author_id ? await getAuthor(a.author_id) : null;
-  const related = await listRelated(a.category, a.id, 6);
-  const ads = await pickAds(
-    { category: a.category, title: a.title, summary: a.summary, body: a.body },
-    2,
-  );
-  const [bodyTop, bodyRest] = splitBodyForAd(a.body || "");
+  const [author, related, ads, layout] = await Promise.all([
+    a.author_id ? getAuthor(a.author_id) : Promise.resolve(null),
+    listRelated(a.category, a.id, 6),
+    pickAds({ category: a.category, title: a.title, summary: a.summary, body: a.body }, 2),
+    getArticleLayoutSettings(),
+  ]);
+  const cleanBody = stripInlineSourcesSection(a.body || "");
+  const headings = extractHeadings(cleanBody);
+  const [bodyTop, bodyRest] = splitBodyForAd(cleanBody);
   const sourceLinks = (a.source_urls ?? []).filter(
     (s): s is { title?: string; url: string; source?: string } => Boolean(s.url),
   );
@@ -187,6 +192,8 @@ export default async function ArticlePage({
         priority
       />
 
+      {layout.show_toc && <TableOfContents headings={headings} />}
+
       <div className="mt-7">
         <ArticleBody body={bodyTop} />
         {ads[0] && bodyRest && (
@@ -207,7 +214,7 @@ export default async function ArticlePage({
         </div>
       )}
 
-      {sourceLinks.length > 0 && (
+      {layout.show_sources && sourceLinks.length > 0 && (
         <div className="mt-8 rounded-xl border border-line bg-surface p-4 text-sm">
           <div className="mb-2 font-semibold text-ink">మూలాలు (Sources)</div>
           <ul className="space-y-1.5">
@@ -234,7 +241,7 @@ export default async function ArticlePage({
         </div>
       )}
 
-      {related.length > 0 && (
+      {layout.show_related && related.length > 0 && (
         <section className="mt-12">
           <h2 className="mb-4 flex items-center gap-2 border-b-2 border-line pb-2 text-[18px] font-extrabold text-ink">
             <span className="h-5 w-[5px] rounded-full bg-accent" />
