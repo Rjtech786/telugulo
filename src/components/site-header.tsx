@@ -34,7 +34,7 @@ export function SiteHeader({
 
           <div className="flex items-center gap-3">
             {/* Search (desktop: inline box · mobile: icon → /search) */}
-            <form action="/search" className="hidden md:block">
+            <form action="/search/" className="hidden md:block">
               <div className="flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 transition focus-within:border-accent">
                 <SearchIcon className="h-4 w-4 flex-none text-ink-mute" />
                 <input
@@ -46,7 +46,7 @@ export function SiteHeader({
               </div>
             </form>
             <Link
-              href="/search"
+              href="/search/"
               aria-label="వెతకండి"
               className="grid h-9 w-9 place-items-center rounded-full border border-line text-ink-soft transition hover:border-accent hover:text-accent md:hidden"
             >
@@ -66,7 +66,7 @@ export function SiteHeader({
         <div className="mx-auto flex max-w-[1180px] items-center gap-0.5 overflow-x-auto px-2 no-scrollbar">
           <NavLink href="/" label="హోమ్" />
           {CATEGORIES.map((c) => (
-            <NavLink key={c.slug} href={`/category/${c.slug}`} label={c.label} />
+            <NavLink key={c.slug} href={`/category/${c.slug}/`} label={c.label} />
           ))}
         </div>
       </nav>

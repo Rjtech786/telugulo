@@ -247,7 +247,7 @@ function TopList({ title, items }: { title: string; items: TopArticle[] }) {
           {items.map((a, i) => (
             <li key={a.article_id}>
               <Link
-                href={`/${a.slug}`}
+                href={`/${a.slug}/`}
                 target="_blank"
                 className="group flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface"
               >

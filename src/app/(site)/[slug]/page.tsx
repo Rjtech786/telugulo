@@ -126,7 +126,7 @@ export default async function ArticlePage({
 
       <div className="mt-6">
         {a.category ? (
-          <Link href={`/category/${a.category}`}>
+          <Link href={`/category/${a.category}/`}>
             <CategoryBadge slug={a.category} />
           </Link>
         ) : (
@@ -154,7 +154,7 @@ export default async function ArticlePage({
         <span>
           <span className="block font-medium text-ink">
             {author?.slug ? (
-              <Link href={`/author/${author.slug}`} className="hover:text-accent">
+              <Link href={`/author/${author.slug}/`} className="hover:text-accent">
                 {author.name}
               </Link>
             ) : (

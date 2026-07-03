@@ -39,7 +39,7 @@ export function SiteFooter({
           </p>
           <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-[13px] font-medium text-ink-soft">
             {orderPages(pages).map((p) => (
-              <Link key={p.slug} href={`/${p.slug}`} className="hover:text-accent">
+              <Link key={p.slug} href={`/${p.slug}/`} className="hover:text-accent">
                 {p.title}
               </Link>
             ))}

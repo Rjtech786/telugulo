@@ -25,7 +25,7 @@ export default async function SearchPage({
         <h1 className="text-[18px] font-extrabold text-ink">వెతకండి</h1>
       </div>
 
-      <form action="/search" className="mb-7 flex max-w-xl gap-2">
+      <form action="/search/" className="mb-7 flex max-w-xl gap-2">
         <input
           type="search"
           name="q"

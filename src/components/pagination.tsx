@@ -7,7 +7,7 @@ import Link from "next/link";
 export function Pagination({ current, totalPages }: { current: number; totalPages: number }) {
   if (totalPages <= 1) return null;
 
-  const hrefFor = (p: number) => (p <= 1 ? "/" : `/page/${p}`);
+  const hrefFor = (p: number) => (p <= 1 ? "/" : `/page/${p}/`);
 
   // Window of page numbers: 1 … (c-1, c, c+1) … last
   const nums = new Set<number>([1, totalPages, current - 1, current, current + 1]);

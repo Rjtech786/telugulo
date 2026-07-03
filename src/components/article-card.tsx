@@ -14,7 +14,7 @@ export function CategoryBadge({ slug }: { slug: string | null }) {
 /** Image-top card (used in the full-width 4-column rows). */
 export function ArticleCard({ a }: { a: PublicArticle }) {
   return (
-    <Link href={`/${a.slug}`} className="group block">
+    <Link href={`/${a.slug}/`} className="group block">
       <Thumb
         src={a.image_url}
         alt={a.title}
@@ -45,7 +45,7 @@ export function ArticleListItem({
 }) {
   return (
     <Link
-      href={`/${a.slug}`}
+      href={`/${a.slug}/`}
       className="group flex gap-3 border-b border-line py-3 last:border-0"
     >
       <div className="relative flex-shrink-0">

@@ -71,7 +71,7 @@ export default async function HomePage() {
       {/* ── Featured: 3-column top ── */}
       <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr_1.05fr]">
         {/* Big featured */}
-        <Link href={`/${featured.slug}`} className="group block">
+        <Link href={`/${featured.slug}/`} className="group block">
           <Thumb
             src={featured.image_url}
             alt={featured.title}
