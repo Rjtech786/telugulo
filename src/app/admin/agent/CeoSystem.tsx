@@ -204,17 +204,28 @@ const DEMO_V3: {
     { final_status: "published", reviewer_scores: { fact: 10, language: 9, discover: 9, loops: 1 } },
     { final_status: "skipped_off_niche" },
     { final_status: "published", reviewer_scores: { fact: 8, language: 9, discover: 8, loops: 2 } },
-  ].map((r, i) => ({
-    id: `pr-${i}`,
-    article_id: null,
-    trigger: i % 2 ? "cron" : "manual",
-    stage_logs: [],
-    facts_table: null,
-    hard_validator_results: null,
-    failure_report: null,
-    ...r,
-    created_at: new Date(Date.now() - i * 86400000).toISOString(),
-  })) as PipelineRunRow[],
+  ].map((r, i) => {
+    const defaultLogs = [
+      { stage: "Topic Scout", summary: "RSS candidates discovered: 12. Finalised: Google Gemini 3 India launch.", ms: 3800, output_tokens: 85 },
+      { stage: "Duplicate Guard", summary: "Niche classification and duplicate check passed.", ms: 1900, output_tokens: 30 },
+      { stage: "Researcher", summary: "Found 12 facts from 5 web sources with Gemini search grounding.", ms: 12400, output_tokens: 410 },
+      { stage: "Writer", summary: "Completed outline-first draft generation (850 words).", ms: 24600, word_count: 850, output_tokens: 1520 },
+      { stage: "Verify Mode", summary: "Review loop 1: fact 9/10, language 8/10, discover 9/10.", ms: 15300, output_tokens: 720 },
+      { stage: "Fixer", summary: "Fixer loop 2: resolved language issues, inserted 2 internal links.", ms: 8900, output_tokens: 490 },
+      { stage: "Publish Gate", summary: "Hard code validators passed. Auto-published.", ms: 1200, output_tokens: 0 }
+    ];
+    return {
+      id: `pr-${i}`,
+      article_id: null,
+      trigger: i % 2 ? "cron" : "manual",
+      stage_logs: r.final_status === "published" ? defaultLogs : [],
+      facts_table: null,
+      hard_validator_results: null,
+      failure_report: null,
+      ...r,
+      created_at: new Date(Date.now() - i * 86400000).toISOString(),
+    };
+  }) as PipelineRunRow[],
 };
 
 export function CeoSystem({ demo = false }: { demo?: boolean }) {
@@ -225,6 +236,7 @@ export function CeoSystem({ demo = false }: { demo?: boolean }) {
   const [starting, setStarting] = useState(false);
   const [selected, setSelected] = useState<AgentNodeId | "ceo" | null>(null);
   const [selectedRun, setSelectedRun] = useState<PipelineRunRow | null>(null);
+  const [runTab, setRunTab] = useState<"overview" | "timeline">("overview");
   const seenCount = useRef(0);
   const liveRunId = useRef<string | null>(null);
 
@@ -819,7 +831,10 @@ export function CeoSystem({ demo = false }: { demo?: boolean }) {
                 return (
                   <button
                     key={r.id}
-                    onClick={() => setSelectedRun(selectedRun?.id === r.id ? null : r.id === selectedRun?.id ? null : r)}
+                    onClick={() => {
+                      setSelectedRun(selectedRun?.id === r.id ? null : r);
+                      setRunTab("overview");
+                    }}
                     title={`${r.final_status ?? "running"} · ${timeAgo(r.created_at)}`}
                     className={
                       `flex h-11 w-11 flex-col items-center justify-center rounded-lg text-[9px] font-bold text-white/90 shadow-inner transition hover:scale-110 hover:shadow-[0_0_14px_rgba(124,108,232,0.5)] ${runBlockColor(r)} ` +
@@ -833,42 +848,168 @@ export function CeoSystem({ demo = false }: { demo?: boolean }) {
               })}
             </div>
             {selectedRun && (
-              <div className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3 text-xs">
-                <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
-                    selectedRun.final_status === "published"
-                      ? "border-green-400/40 text-green-300"
-                      : selectedRun.final_status === "draft_failed" || selectedRun.final_status === "error"
-                        ? "border-red-400/40 text-red-300"
-                        : "border-amber-400/40 text-amber-300"
-                  }`}>
-                    {selectedRun.final_status === "draft_failed" ? "Draft (failed verify)" : selectedRun.final_status ?? "running"}
-                  </span>
-                  <span className="text-slate-400">{timeAgo(selectedRun.created_at)} · trigger: {selectedRun.trigger ?? "—"}</span>
-                  {selectedRun.reviewer_scores && (
-                    <span className="text-slate-300">
-                      fact {selectedRun.reviewer_scores.fact ?? "—"} · language {selectedRun.reviewer_scores.language ?? "—"} · discover{" "}
-                      {selectedRun.reviewer_scores.discover ?? "—"} · {selectedRun.reviewer_scores.loops ?? 0} loop(s)
-                    </span>
-                  )}
-                  {(selectedRun.final_status === "draft_failed" || selectedRun.final_status === "error") &&
-                    selectedRun.article_id && (
-                      <button
-                        onClick={() => reverifyNow(selectedRun.article_id!)}
-                        disabled={reverifying || isRunning || demo}
-                        className="ml-auto rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-1 text-[11px] font-bold text-white shadow-[0_0_14px_rgba(245,158,11,0.4)] transition hover:brightness-110 disabled:opacity-50"
-                      >
-                        {reverifying ? "Start…" : "🛡️ Re-verify karo"}
-                      </button>
-                    )}
+              <div className="mt-3 rounded-xl border border-white/10 bg-black/35 p-3 text-xs">
+                {/* Tabs */}
+                <div className="mb-3 flex border-b border-white/5 pb-2">
+                  <button
+                    onClick={() => setRunTab("overview")}
+                    className={`pb-1 pr-4 font-bold tracking-tight uppercase text-[10px] ${
+                      runTab === "overview" ? "text-[#c4b5fd] border-b border-[#8b7cff]" : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Overview & Report
+                  </button>
+                  <button
+                    onClick={() => setRunTab("timeline")}
+                    className={`pb-1 font-bold tracking-tight uppercase text-[10px] ${
+                      runTab === "timeline" ? "text-[#c4b5fd] border-b border-[#8b7cff]" : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Timeline & Costs 💰
+                  </button>
                 </div>
-                {selectedRun.failure_report != null && (
-                  <pre className="mt-1 max-h-52 overflow-auto whitespace-pre-wrap rounded-lg bg-black/40 p-2.5 text-[10.5px] leading-relaxed text-slate-400">
-                    {JSON.stringify(selectedRun.failure_report, null, 2)}
-                  </pre>
+
+                {runTab === "overview" ? (
+                  <>
+                    <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                        selectedRun.final_status === "published"
+                          ? "border-green-400/40 text-green-300"
+                          : selectedRun.final_status === "draft_failed" || selectedRun.final_status === "error"
+                            ? "border-red-400/40 text-red-300"
+                            : "border-amber-400/40 text-amber-300"
+                      }`}>
+                        {selectedRun.final_status === "draft_failed" ? "Draft (failed verify)" : selectedRun.final_status ?? "running"}
+                      </span>
+                      <span className="text-slate-400">{timeAgo(selectedRun.created_at)} · trigger: {selectedRun.trigger ?? "—"}</span>
+                      {selectedRun.reviewer_scores && (
+                        <span className="text-slate-300">
+                          fact {selectedRun.reviewer_scores.fact ?? "—"} · language {selectedRun.reviewer_scores.language ?? "—"} · discover{" "}
+                          {selectedRun.reviewer_scores.discover ?? "—"} · {selectedRun.reviewer_scores.loops ?? 0} loop(s)
+                        </span>
+                      )}
+                      {(selectedRun.final_status === "draft_failed" || selectedRun.final_status === "error") &&
+                        selectedRun.article_id && (
+                          <button
+                            onClick={() => reverifyNow(selectedRun.article_id!)}
+                            disabled={reverifying || isRunning || demo}
+                            className="ml-auto rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 px-3 py-1 text-[11px] font-bold text-white shadow-[0_0_14px_rgba(245,158,11,0.4)] transition hover:brightness-110 disabled:opacity-50"
+                          >
+                            {reverifying ? "Start…" : "🛡️ Re-verify karo"}
+                          </button>
+                        )}
+                    </div>
+                    {selectedRun.failure_report != null && (
+                      <pre className="mt-1 max-h-52 overflow-auto whitespace-pre-wrap rounded-lg bg-black/40 p-2.5 text-[10.5px] leading-relaxed text-slate-400">
+                        {JSON.stringify(selectedRun.failure_report, null, 2)}
+                      </pre>
+                    )}
+                  </>
+                ) : (
+                  <div className="space-y-3">
+                    {(() => {
+                      const logs = selectedRun.stage_logs ?? [];
+                      if (logs.length === 0) {
+                        return <p className="text-slate-500 py-1">Is run ke detailed stage logs available nahi hain.</p>;
+                      }
+                      const totalMs = logs.reduce((sum, l) => sum + (l.ms ?? 0), 0);
+                      const maxMs = Math.max(...logs.map((l) => l.ms ?? 0), 1);
+                      const totalTokens = logs.reduce((sum, l) => sum + (l.output_tokens ?? 0), 0);
+                      const cost = totalTokens * 0.005; // average ₹0.005 per output token
+                      return (
+                        <>
+                          <div className="flex flex-wrap justify-between gap-2 border-b border-white/5 pb-2 text-[11px] text-slate-300 font-semibold">
+                            <span>⏱️ Duration: {(totalMs / 1000).toFixed(1)}s</span>
+                            <span>💵 Est. Cost: ~₹{cost.toFixed(2)} ({totalTokens} tokens)</span>
+                          </div>
+                          <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                            {logs.map((log, idx) => {
+                              const pct = ((log.ms ?? 0) / maxMs) * 100;
+                              return (
+                                <div key={idx} className="space-y-1 rounded border border-white/5 bg-white/[0.02] p-2">
+                                  <div className="flex justify-between items-center text-[10.5px] font-bold text-slate-200">
+                                    <span>⚙️ {log.stage}</span>
+                                    <span>
+                                      {log.ms ? `${(log.ms / 1000).toFixed(1)}s` : ""}
+                                      {log.output_tokens ? ` · ${log.output_tokens} tkn` : ""}
+                                      {log.word_count ? ` · ${log.word_count} words` : ""}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] text-slate-400 leading-snug">{log.summary}</p>
+                                  {log.ms ? (
+                                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                                      <div
+                                        className="h-full bg-gradient-to-r from-[#7c6ce8] to-[#67e8f9] rounded-full"
+                                        style={{ width: `${Math.max(3, pct)}%` }}
+                                      />
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
                 )}
               </div>
             )}
+
+            {/* Agent Benchmarks Card */}
+            {v3 && v3.pipelineRuns.length > 0 && (() => {
+              const successRuns = v3.pipelineRuns.filter((r) => r.final_status === "published");
+              const totalRuns = v3.pipelineRuns.length;
+              const uptime = totalRuns ? Math.round((successRuns.length / totalRuns) * 100) : 0;
+
+              let factSum = 0, langSum = 0, discSum = 0, loopSum = 0, scoreCount = 0;
+              for (const r of successRuns) {
+                if (r.reviewer_scores) {
+                  factSum += r.reviewer_scores.fact ?? 0;
+                  langSum += r.reviewer_scores.language ?? 0;
+                  discSum += r.reviewer_scores.discover ?? 0;
+                  loopSum += r.reviewer_scores.loops ?? 0;
+                  scoreCount++;
+                }
+              }
+              const avgFact = scoreCount ? (factSum / scoreCount).toFixed(1) : "—";
+              const avgLang = scoreCount ? (langSum / scoreCount).toFixed(1) : "—";
+              const avgDisc = scoreCount ? (discSum / scoreCount).toFixed(1) : "—";
+              const avgLoops = scoreCount ? (loopSum / scoreCount).toFixed(1) : "—";
+
+              return (
+                <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3 text-xs space-y-2">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-[#c4b5fd] flex items-center gap-1.5">
+                      📈 Agent Performance Benchmarks
+                    </span>
+                    <span className="text-[10px] text-slate-400">calculated from last {totalRuns} runs</span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pt-1 text-center">
+                    <div className="rounded-lg bg-black/20 p-2 border border-white/5">
+                      <div className="text-[9px] text-slate-500 font-bold uppercase tracking-tight">Success Rate</div>
+                      <div className="text-base font-bold text-green-400 mt-0.5">{uptime}%</div>
+                    </div>
+                    <div className="rounded-lg bg-black/20 p-2 border border-white/5">
+                      <div className="text-[9px] text-slate-500 font-bold uppercase tracking-tight">Avg Fact Check</div>
+                      <div className="text-base font-bold text-cyan-400 mt-0.5">{avgFact}/10</div>
+                    </div>
+                    <div className="rounded-lg bg-black/20 p-2 border border-white/5">
+                      <div className="text-[9px] text-slate-500 font-bold uppercase tracking-tight">Avg Telugu Purity</div>
+                      <div className="text-base font-bold text-indigo-400 mt-0.5">{avgLang}/10</div>
+                    </div>
+                    <div className="rounded-lg bg-black/20 p-2 border border-white/5">
+                      <div className="text-[9px] text-slate-500 font-bold uppercase tracking-tight">Avg Discover Score</div>
+                      <div className="text-base font-bold text-pink-400 mt-0.5">{avgDisc}/10</div>
+                    </div>
+                    <div className="rounded-lg bg-black/20 p-2 border border-white/5">
+                      <div className="text-[9px] text-slate-500 font-bold uppercase tracking-tight">Avg Fix Loops</div>
+                      <div className="text-base font-bold text-amber-400 mt-0.5">{avgLoops} L</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
