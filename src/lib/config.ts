@@ -5,12 +5,13 @@
  */
 
 // ─── Text AI providers + their selectable models ───
-export type TextProvider = "claude" | "openai" | "gemini";
+export type TextProvider = "claude" | "openai" | "gemini" | "nvidia";
 
 export const TEXT_PROVIDERS: { id: TextProvider; label: string }[] = [
   { id: "claude", label: "Claude (Anthropic)" },
   { id: "openai", label: "OpenAI" },
   { id: "gemini", label: "Gemini (Google)" },
+  { id: "nvidia", label: "NVIDIA NIM" },
 ];
 
 export const TEXT_MODELS: Record<
@@ -30,6 +31,11 @@ export const TEXT_MODELS: Record<
   gemini: [
     { id: "gemini-2.5-flash", label: "2.5 Flash — cheap", tier: "cheap" },
     { id: "gemini-2.5-pro", label: "2.5 Pro — quality", tier: "quality" },
+  ],
+  nvidia: [
+    { id: "meta/llama-3.1-8b-instruct", label: "Llama 3.1 8B — cheap", tier: "cheap" },
+    { id: "meta/llama-3.1-70b-instruct", label: "Llama 3.1 70B — medium", tier: "medium" },
+    { id: "meta/llama-3.1-405b-instruct", label: "Llama 3.1 405B — quality", tier: "quality" },
   ],
 };
 
@@ -148,7 +154,8 @@ export type CredentialProvider =
   | "imagen"
   | "dalle"
   | "telegram_token"
-  | "telegram_chat";
+  | "telegram_chat"
+  | "nvidia";
 
 export const CREDENTIALS: {
   provider: CredentialProvider;
@@ -163,6 +170,7 @@ export const CREDENTIALS: {
   { provider: "dalle", label: "DALL·E key", hint: "optional — OpenAI key", testable: true },
   { provider: "telegram_token", label: "Telegram Bot Token", hint: "from @BotFather", testable: true },
   { provider: "telegram_chat", label: "Telegram Chat ID", hint: "from @userinfobot", testable: true },
+  { provider: "nvidia", label: "NVIDIA API key", hint: "NVIDIA NIM — nvapi-…", testable: true },
 ];
 
 // ─── Feature toggles (spec §8.3b) ───

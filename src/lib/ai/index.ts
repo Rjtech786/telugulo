@@ -45,11 +45,12 @@ export async function runStep(
 // Reliability: if a step's configured provider throws (rate limit, outage,
 // bad key), retry once on a different provider instead of aborting the whole
 // run — e.g. Claude fails -> retried on Gemini.
-const FALLBACK_ORDER: TextProvider[] = ["gemini", "openai", "claude"];
+const FALLBACK_ORDER: TextProvider[] = ["gemini", "openai", "claude", "nvidia"];
 const FALLBACK_MODEL: Record<TextProvider, string> = {
   claude: "claude-sonnet-4-6",
   openai: "gpt-4o",
   gemini: "gemini-2.5-flash",
+  nvidia: "meta/llama-3.1-70b-instruct",
 };
 
 export type StepResult = TextGenResult & {

@@ -514,7 +514,7 @@ export const TOOLS: McpTool[] = [
       if (!step) throw new Error(`Unknown task. Use one of: ${Object.keys(TASK_TO_STEP).join(", ")}`);
       const provider = String(a.provider) as TextProvider;
       if (!TEXT_PROVIDERS.some((p) => p.id === provider)) {
-        throw new Error("provider must be claude | openai | gemini");
+        throw new Error(`provider must be ${TEXT_PROVIDERS.map((p) => p.id).join(" | ")}`);
       }
       const model = String(a.model);
       if (!TEXT_MODELS[provider].some((m) => m.id === model)) {

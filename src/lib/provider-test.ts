@@ -101,6 +101,14 @@ export async function testProvider(
         } catch {}
         return { ok: false, message: `Failed: ${detail}` };
       }
+      case "nvidia": {
+        const { status } = await ping("https://integrate.api.nvidia.com/v1/models", {
+          headers: { Authorization: `Bearer ${key}` },
+        });
+        return status === 200
+          ? { ok: true, message: "NVIDIA NIM key valid ✓" }
+          : { ok: false, message: `NVIDIA NIM returned ${status}` };
+      }
       default:
         return { ok: false, message: "Unknown provider" };
     }

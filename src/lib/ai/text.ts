@@ -131,6 +131,36 @@ export async function generateText(
       };
     }
 
+    case "nvidia": {
+      const messages = [
+        ...(params.system
+          ? [{ role: "system", content: params.system }]
+          : []),
+        { role: "user", content: params.prompt },
+      ];
+      const data = await postJson(
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            max_tokens: maxTokens,
+            temperature,
+          }),
+        },
+      );
+      return {
+        text: data.choices?.[0]?.message?.content ?? "",
+        inputTokens: data.usage?.prompt_tokens,
+        outputTokens: data.usage?.completion_tokens,
+      };
+    }
+
     default:
       throw new Error(`Unknown text provider: ${provider}`);
   }
