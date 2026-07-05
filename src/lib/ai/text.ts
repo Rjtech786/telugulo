@@ -117,6 +117,9 @@ export async function generateText(
             generationConfig: {
               maxOutputTokens: maxTokens,
               temperature,
+              ...(model.includes("gemini-2.5")
+                ? { thinkingConfig: { thinkingBudget: 0 } }
+                : {}),
             },
           }),
         },
