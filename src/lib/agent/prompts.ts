@@ -396,14 +396,20 @@ export function languageEditorPrompt(
         .join("\n")}\n`
     : "";
   return `You are the LANGUAGE EDITOR for telugulo.in. Go through this Telugu article sentence by sentence. For each sentence ask: "Would an ordinary Telugu speaker say this aloud naturally?"
-
+ 
 HOUSE STYLE (CRITICAL — read first): telugulo.in writes HYBRID Telugu. English tech/business loanwords — in Latin script or Telugu script (ఫీచర్లు, డెవలపర్లు, ప్రోగ్రామ్, యాప్, టూల్స్, అప్డేట్, ఏజెంట్, టౌన్ హాల్, ఆప్టిన్/opt-in, ప్లాట్‌ఫామ్...) — are CORRECT and must NOT be flagged. NEVER suggest textbook/Sanskrit Telugu replacements (లక్షణాలు, పాఠ్యక్రమం, అభివృద్ధి కర్తలు, ప్రతినిధులు, అంతర్జాలం...). The problem you hunt for is the OPPOSITE: textbook/literary Telugu where spoken Telugu or an English word is natural.
 ${banned}
-Flag ONLY: machine-translation nonsense words, broken grammar, textbook/Sanskrit-heavy Telugu where spoken Telugu or English is natural (వేదిక→platform, కృత్రిమ మేధ→AI, అంతర్జాలం→internet), spelling errors, Telugu-script numerals (౨౦౨౬ → 2026), inconsistent transliteration of the same proper noun, uniform sentence lengths, repeated points.
+COMMON AI-TRANSLATION SLIPS (CRITICAL - FLAG THESE AS MAJOR ISSUES):
+- Literal "possesses" (కలిగి ఉంది / కలిగి ఉన్నాయి): e.g. "ఈ ఫోన్ 5000mAh బ్యాటరీని కలిగి ఉంది" is unnatural. Suggest rewriting to simple active form: "ఈ ఫోన్ 5000mAh బ్యాటరీతో వస్తుంది" or "ఈ ఫోన్‌లో 5000mAh బ్యాటరీ ఉంది".
+- Excessive passive voice ending in "బడింది / బడ్డాయి": e.g. "ఈ అప్‌డేట్ విడుదల చేయబడింది" or "ఫీచర్ జోడించబడింది" sounds translated. Suggest active form: "ఈ అప్‌డేట్ విడుదల చేశారు" or "ఫీచర్ తీసుకొచ్చారు".
+- Forced transitions: e.g. using "మరోవైపు" (On the other hand) or "మొత్తం మీద" (Overall) to translate English linking phrases literally, when simple Telugu flows better.
+- Literal translations of "not only... but also..." (మాత్రమే కాదు... కూడా...) when it clusters sentences unnaturally.
 
+Flag ONLY: machine-translation nonsense words, broken grammar, textbook/Sanskrit-heavy Telugu where spoken Telugu or English is natural (వేదిక→platform, కృత్రిమ మేధ→AI, అంతర్జాలం→internet), spelling errors, Telugu-script numerals (౨౦౨౬ → 2026), inconsistent transliteration of the same proper noun, uniform sentence lengths, repeated points, and the AI-translation slips listed above.
+ 
 ARTICLE:
 ${body}
-
+ 
 Also list any NEW nonsense/textbook phrases you found (not already in the banned list) as new_banned_phrases.
 
 Respond ONLY with JSON (no markdown):

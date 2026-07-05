@@ -46,6 +46,29 @@ export type PipelineResult = {
   runId?: string;
 };
 
+/** Selects an expert writing persona dynamically based on topic keywords. */
+function getWriterPersona(title: string): string {
+  const t = title.toLowerCase();
+  
+  const aiKeywords = ["ai", "openai", "gemini", "chatgpt", "claude", "llm", "artificial intelligence", "nvidia", "copilot", "bot", "machine learning", "ml"];
+  const mobileKeywords = ["iphone", "samsung", "oneplus", "xiaomi", "pixel", "smartphone", "mobile", "snapdragon", "dimensity", "realme", "vivo", "oppo", "android", "ios", "phone"];
+  const softwareKeywords = ["app", "play store", "app store", "whatsapp", "youtube", "instagram", "facebook", "browser", "software", "update", "policy", "features", "website", "service"];
+
+  if (aiKeywords.some(kw => t.includes(kw))) {
+    return "You are a Senior AI Research Journalist for telugulo.in with deep technical understanding of machine learning models, NLP, neural networks, and generative AI systems. You explain complex artificial intelligence concepts, benchmark scores, and safety policies in simple, engaging hybrid Telugu, maintaining absolute factual accuracy.";
+  }
+  
+  if (mobileKeywords.some(kw => t.includes(kw))) {
+    return "You are a Veteran Hardware and Smartphone Reviewer for telugulo.in who has tested hundreds of mobile processors, camera sensors, displays, and battery tech. You write about phone launches, performance chips, charging speeds, and user value with an expert perspective, using natural, spoken hybrid Telugu.";
+  }
+
+  if (softwareKeywords.some(kw => t.includes(kw))) {
+    return "You are a Consumer Software and UX Analyst for telugulo.in. You analyze user interfaces, app updates, digital privacy settings, internet browser policies, and social media platforms. You explain new software updates and digital changes to regular readers in simple, daily-speech hybrid Telugu.";
+  }
+
+  return "You are the Lead Tech Journalist for telugulo.in. You cover breaking tech news, gadget announcements, enterprise movements, and internet trends. You write with deep analytical clarity, making tech stories understandable and interesting for Telugu readers.";
+}
+
 /** Extract a JSON object from a model response (tolerates ``` fences / prose). */
 function parseJson<T>(raw: string): T {
   let s = raw.trim();
@@ -387,8 +410,9 @@ export async function runPipeline(
       tone: general.tone,
       rules,
     });
+    const writerPersona = getWriterPersona(cand.title);
     let written = await runAgentStep("writer", "writing", {
-      system: assembleAgentSystem(SYSTEM_EDITOR, writerCfg, writerNotes),
+      system: assembleAgentSystem(writerPersona, writerCfg, writerNotes),
       prompt: writerPrompt,
       maxTokens: 8000, // Telugu ≈ 5-6x tokens/word — 2000 was truncating at ~450 words
       temperature: 0.8,
@@ -405,7 +429,7 @@ export async function runPipeline(
         "Output format galat tha — strict format reminder ke saath dobara likhwa raha hoon.",
         `RAW OUTPUT (first 500 chars):\n${written.text.slice(0, 500)}`);
       written = await runAgentStep("writer", "writing", {
-        system: assembleAgentSystem(SYSTEM_EDITOR, writerCfg, writerNotes),
+        system: assembleAgentSystem(writerPersona, writerCfg, writerNotes),
         prompt:
           writerPrompt +
           "\n\nCRITICAL REMINDER: respond ONLY in the exact labeled format above (HEADLINE: / TITLE_META: / ... / BODY:). No preamble, no JSON, no markdown fences around the whole answer, no bold labels.",
