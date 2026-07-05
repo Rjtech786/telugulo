@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { publish, unpublish, remove, createManualArticle } from "./actions";
@@ -24,8 +24,12 @@ export function ArticlesClient({ articles }: { articles: Row[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
 
-  const drafts = articles.filter((a) => a.status === "draft");
-  const published = articles.filter((a) => a.status === "published");
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("all");
+  const [status, setStatus] = useState("all");
+  const [sort, setSort] = useState("newest");
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 15;
 
   function newManual() {
     start(async () => {
@@ -34,9 +38,34 @@ export function ArticlesClient({ articles }: { articles: Row[] }) {
     });
   }
 
+  // Filter & Sort
+  const filtered = articles.filter((a) => {
+    const matchesSearch =
+      a.title.toLowerCase().includes(search.toLowerCase()) ||
+      (a.slug ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (a.summary ?? "").toLowerCase().includes(search.toLowerCase());
+    const matchesCategory = category === "all" || a.category === category;
+    const matchesStatus = status === "all" || a.status === status;
+    return matchesSearch && matchesCategory && matchesStatus;
+  });
+
+  const sorted = [...filtered].sort((x, y) => {
+    if (sort === "newest") return new Date(y.created_at).getTime() - new Date(x.created_at).getTime();
+    if (sort === "oldest") return new Date(x.created_at).getTime() - new Date(y.created_at).getTime();
+    if (sort === "views") return y.views - x.views;
+    if (sort === "title") return x.title.localeCompare(y.title);
+    return 0;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / itemsPerPage));
+  const currentPage = Math.min(page, totalPages);
+  const paginated = sorted.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const uniqueCategories = Array.from(new Set(articles.map((a) => a.category).filter(Boolean))) as string[];
+
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Articles</h1>
           <p className="text-sm text-neutral-500">
@@ -56,37 +85,85 @@ export function ArticlesClient({ articles }: { articles: Row[] }) {
         </button>
       </div>
 
-      <Section title={`Drafts (${drafts.length})`}>
-        {drafts.length === 0 ? (
-          <Empty text="No drafts. Hit “Generate now” or wait for the daily cron." />
-        ) : (
-          drafts.map((a) => (
-            <ArticleCard key={a.id} a={a} pending={pending} start={start} router={router} />
-          ))
-        )}
-      </Section>
+      {/* Filter Toolbar */}
+      <div className="flex flex-wrap gap-3 rounded-xl border border-neutral-200 bg-white p-3.5 dark:border-neutral-800 dark:bg-neutral-900 shadow-sm">
+        <input
+          type="search"
+          placeholder="Search articles..."
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          className="flex-1 min-w-[200px] rounded-lg border border-neutral-200 bg-slate-50/50 px-3 py-1.5 text-sm outline-none focus:border-accent dark:border-neutral-800 dark:bg-neutral-950"
+        />
+        <select
+          value={category}
+          onChange={(e) => { setCategory(e.target.value); setPage(1); }}
+          className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm outline-none dark:border-neutral-800 dark:bg-neutral-900"
+        >
+          <option value="all">All Categories</option>
+          {uniqueCategories.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+        <select
+          value={status}
+          onChange={(e) => { setStatus(e.target.value); setPage(1); }}
+          className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm outline-none dark:border-neutral-800 dark:bg-neutral-900"
+        >
+          <option value="all">All Statuses</option>
+          <option value="published">Published</option>
+          <option value="draft">Drafts</option>
+        </select>
+        <select
+          value={sort}
+          onChange={(e) => { setSort(e.target.value); setPage(1); }}
+          className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm outline-none dark:border-neutral-800 dark:bg-neutral-900"
+        >
+          <option value="newest">Newest First</option>
+          <option value="oldest">Oldest First</option>
+          <option value="views">Most Views</option>
+          <option value="title">Alphabetical</option>
+        </select>
+      </div>
 
-      <Section title={`Published (${published.length})`}>
-        {published.length === 0 ? (
-          <Empty text="Nothing published yet." />
+      <div className="space-y-2">
+        {paginated.length === 0 ? (
+          <Empty text="No articles matched your criteria." />
         ) : (
-          published.map((a) => (
+          paginated.map((a) => (
             <ArticleCard key={a.id} a={a} pending={pending} start={start} router={router} />
           ))
         )}
-      </Section>
+      </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border-t border-neutral-100 pt-4 dark:border-neutral-800">
+          <span className="text-xs text-neutral-500">
+            Showing {Math.min(sorted.length, (currentPage - 1) * itemsPerPage + 1)}–
+            {Math.min(sorted.length, currentPage * itemsPerPage)} of {sorted.length} articles
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="rounded-lg border border-neutral-200 px-3 py-1 text-xs font-semibold hover:bg-slate-50 disabled:opacity-40 dark:border-neutral-800 dark:hover:bg-neutral-800"
+            >
+              Previous
+            </button>
+            <span className="text-xs text-neutral-500 font-medium">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="rounded-lg border border-neutral-200 px-3 py-1 text-xs font-semibold hover:bg-slate-50 disabled:opacity-40 dark:border-neutral-800 dark:hover:bg-neutral-800"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="space-y-2">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500">
-        {title}
-      </h2>
-      <div className="space-y-2">{children}</div>
-    </section>
   );
 }
 

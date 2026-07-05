@@ -12,6 +12,18 @@
   color-scheme: light;
 }
 
+.dark {
+  --background: #0b0d10;
+  --foreground: #f3f4f6;
+  --color-surface: #12151c;
+  --color-line: #222630;
+  --color-ink: #f3f4f6;
+  --color-ink-soft: #a1a8b3;
+  --color-ink-mute: #626a75;
+  --color-accent-soft: #2e0508;
+  color-scheme: dark;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

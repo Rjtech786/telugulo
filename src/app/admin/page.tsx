@@ -38,19 +38,75 @@ async function getContentStats(): Promise<Content> {
   }
 }
 
+async function getPipelineDashboardData() {
+  try {
+    const supabase = createAdminClient();
+    
+    // 1. Get latest pipeline run
+    const { data: latestRun } = await supabase
+      .from("pipeline_runs")
+      .select("final_status, created_at, reviewer_scores, stage_logs")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // 2. Calculate monthly cost from output tokens
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    const { data: monthRuns } = await supabase
+      .from("pipeline_runs")
+      .select("stage_logs")
+      .gte("created_at", startOfMonth.toISOString());
+    
+    let totalMonthTokens = 0;
+    if (monthRuns) {
+      for (const r of monthRuns) {
+        const logs = (r.stage_logs ?? []) as { output_tokens?: number }[];
+        for (const l of logs) {
+          totalMonthTokens += l.output_tokens ?? 0;
+        }
+      }
+    }
+    const estimatedCost = totalMonthTokens * 0.005; // average cost per token in INR
+
+    // 3. Count credential provider keys
+    const { data: keys } = await supabase.from("api_keys").select("provider");
+    const activeKeysCount = keys ? keys.length : 0;
+
+    return {
+      latestRun: latestRun ? {
+        status: latestRun.final_status,
+        date: latestRun.created_at,
+        avgScore: latestRun.reviewer_scores ? (
+          ((latestRun.reviewer_scores.fact ?? 0) + (latestRun.reviewer_scores.language ?? 0) + (latestRun.reviewer_scores.discover ?? 0)) / 3
+        ).toFixed(1) : null
+      } : null,
+      monthlyCost: estimatedCost,
+      activeKeysCount
+    };
+  } catch (e) {
+    console.error("Failed to fetch pipeline dashboard data:", e);
+    return { latestRun: null, monthlyCost: 0, activeKeysCount: 0 };
+  }
+}
+
 export default async function AdminOverview() {
-  const [content, traffic, topToday, topWeek] = await Promise.all([
+  const [content, traffic, topToday, topWeek, extraData] = await Promise.all([
     getContentStats(),
     getTrafficOverview(14).catch(() => null),
     getTopArticlesByRange(startOfTodayIST(), 6).catch(() => []),
     getTopArticlesByRange(daysAgoISO(7), 6).catch(() => []),
+    getPipelineDashboardData(),
   ]);
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Overview</h1>
-        <p className="text-sm text-ink-soft">telugulo.in — traffic &amp; content dashboard</p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">Overview</h1>
+          <p className="text-sm text-ink-soft">telugulo.in — traffic &amp; content dashboard</p>
+        </div>
       </div>
 
       {!content.ready && (
@@ -59,6 +115,51 @@ export default async function AdminOverview() {
           <code>SUPABASE_SERVICE_ROLE_KEY</code> to enable dashboard data. ({content.error})
         </div>
       )}
+
+      {/* ── System Status Indicators Strip ── */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 bg-white border border-line p-4 rounded-2xl dark:bg-neutral-900 dark:border-neutral-800 shadow-sm">
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-500 text-lg">
+            🤖
+          </span>
+          <div>
+            <span className="block text-[10px] font-bold text-ink-mute uppercase tracking-tight">AI Pipeline Status</span>
+            <span className="flex items-center gap-1.5 mt-0.5 text-xs font-semibold text-ink dark:text-white">
+              <span className={`h-2 w-2 rounded-full ${extraData.latestRun?.status === 'published' ? 'bg-green-500 animate-pulse' : extraData.latestRun?.status === 'draft_failed' ? 'bg-amber-500' : 'bg-red-500'}`} />
+              {extraData.latestRun ? (
+                <span>
+                  {extraData.latestRun.status === 'published' ? 'Published' : extraData.latestRun.status === 'draft_failed' ? 'Draft (Verify Fail)' : extraData.latestRun.status ?? 'Idle'} 
+                  {extraData.latestRun.avgScore ? ` (Score: ${extraData.latestRun.avgScore})` : ''}
+                </span>
+              ) : 'No runs yet'}
+            </span>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-3 border-t border-line sm:border-t-0 sm:border-l sm:pl-4 dark:border-neutral-800">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-50 dark:bg-green-950/40 text-green-500 text-lg">
+            💵
+          </span>
+          <div>
+            <span className="block text-[10px] font-bold text-ink-mute uppercase tracking-tight">Est. Spend This Month</span>
+            <span className="block mt-0.5 text-xs font-semibold text-ink dark:text-white">
+              ₹{extraData.monthlyCost.toFixed(2)}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 border-t border-line sm:border-t-0 sm:border-l sm:pl-4 dark:border-neutral-800">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-50 dark:bg-cyan-950/40 text-cyan-500 text-lg">
+            🔑
+          </span>
+          <div>
+            <span className="block text-[10px] font-bold text-ink-mute uppercase tracking-tight">Active API Keys</span>
+            <span className="block mt-0.5 text-xs font-semibold text-ink dark:text-white">
+              {extraData.activeKeysCount} Active Credentials
+            </span>
+          </div>
+        </div>
+      </div>
 
       {/* ── Traffic stat cards ── */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
