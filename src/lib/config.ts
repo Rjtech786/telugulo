@@ -140,7 +140,7 @@ export const PIPELINE_STEPS: {
   { key: "fact_check", label: "Fact Checker (V3)", hint: "claims vs facts table", defaultProvider: "openai", defaultModel: "gpt-4o" },
   { key: "language_edit", label: "Language Editor (V3)", hint: "Telugu deep pass", defaultProvider: "openai", defaultModel: "gpt-4o" },
   { key: "discover_check", label: "Discover Checker (V3)", hint: "SEO + Discover checklist", defaultProvider: "openai", defaultModel: "gpt-4o" },
-  { key: "fixer", label: "Fixer (V3)", hint: "applies reviewer fixes", defaultProvider: "openai", defaultModel: "gpt-4.1" },
+  { key: "fixer", label: "Fixer (V3)", hint: "applies reviewer fixes", defaultProvider: "openai", defaultModel: "gpt-4-turbo" },
   { key: "learning", label: "Learning agent", hint: "data analysis", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
   { key: "performance", label: "Performance analysis", hint: "pattern finding", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
   { key: "ads", label: "Ads placement", hint: "simple decision", defaultProvider: "claude", defaultModel: "claude-haiku-4-5" },
