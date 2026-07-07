@@ -26,7 +26,7 @@ export const TEXT_MODELS: Record<
   openai: [
     { id: "gpt-4o-mini", label: "GPT-4o mini — cheap", tier: "cheap" },
     { id: "gpt-4o", label: "GPT-4o — medium", tier: "medium" },
-    { id: "gpt-4.1", label: "GPT-4.1 — quality", tier: "quality" },
+    { id: "gpt-4-turbo", label: "GPT-4 Turbo — quality", tier: "quality" },
   ],
   gemini: [
     { id: "gemini-2.5-flash", label: "2.5 Flash — cheap", tier: "cheap" },
@@ -105,7 +105,7 @@ export const AGENT_KEYS = [
   "image_agent",
   "ceo",
 ] as const;
-export type AgentKey = (typeof AGENT_KEYS)[number];
+export type AgentKey = string;
 
 export type ModelTier = "cheap" | "mid" | "best";
 /** Map an agent tier to the closest model tier in TEXT_MODELS. */

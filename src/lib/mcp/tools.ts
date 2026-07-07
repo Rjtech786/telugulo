@@ -47,6 +47,14 @@ import {
   daysAgoISO,
 } from "@/lib/analytics";
 import { logMcpAction } from "@/lib/mcp/log";
+import {
+  listPipelineSteps,
+  updatePipelineStep,
+  addAgent,
+  removeAgent,
+  reorderPipeline,
+  type PipelineStep,
+} from "@/lib/agent/pipelineSteps";
 
 type Json = Record<string, unknown>;
 type ToolResult = { text: string; data?: unknown };
@@ -589,6 +597,167 @@ export const TOOLS: McpTool[] = [
         text: `Monthly budget: ₹${cost.monthly_budget}\nEstimated spend (last 30d): ~₹${estimate} (${recent} articles × ~₹6)\nNote: estimate only — real provider spend isn't metered in-app.`,
         data: { budget: cost.monthly_budget, estimate, articles_30d: recent },
       };
+    },
+  },
+  
+  // ─── Pipeline steps / dynamic workflow (spec §2.3) ───
+  {
+    name: "telugulo_get_pipeline",
+    description: "Get the current V3 dynamic agent pipeline execution order, dependencies, and enabled states.",
+    readOnly: true,
+    inputSchema: obj({}),
+    handler: async () => {
+      const steps = await listPipelineSteps();
+      
+      const visual = steps.map((s) => {
+        const name = s.agent_registry?.display_name || s.agent_key;
+        const status = s.enabled ? "ON" : "OFF";
+        const blocking = s.is_blocking ? "blocking" : "non-blocking";
+        const deps = s.depends_on.length ? `[depends on: ${s.depends_on.join(", ")}]` : "";
+        return `Order ${s.step_order}: ${name} (${s.agent_key}) — ${status} · ${blocking} ${deps}`;
+      }).join("\n");
+      
+      return {
+        text: `CURRENT PIPELINE EXECUTION FLOW:\n\n${visual || "No steps loaded."}`,
+        data: steps,
+      };
+    },
+  },
+  {
+    name: "telugulo_update_pipeline_step",
+    description: "Update a pipeline step's order, dependencies, or blocking state. IMPORTANT: pass confirm=true to apply.",
+    inputSchema: obj(
+      {
+        agent_key: str("Which agent step to update."),
+        step_order: num("Optional: new numeric execution order (steps with same order run in parallel)."),
+        depends_on: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional: array of agent_keys that must complete before this runs.",
+        },
+        is_blocking: bool("Optional: if true, failure at this step halts the pipeline."),
+        enabled: bool("Optional: toggle step on/off without deleting it."),
+        confirm: bool("Must be true to apply structural change."),
+      },
+      ["agent_key"],
+    ),
+    handler: async (a) => {
+      const key = String(a.agent_key);
+      if (!a.confirm) {
+        return {
+          text: `This will update the pipeline step configuration for agent "${key}". Re-call with confirm=true to apply.`,
+          data: { pending_confirmation: true },
+        };
+      }
+      
+      const fields: Partial<Pick<PipelineStep, "step_order" | "depends_on" | "is_blocking" | "enabled">> = {};
+      if (a.step_order != null) fields.step_order = Number(a.step_order);
+      if (Array.isArray(a.depends_on)) fields.depends_on = a.depends_on as string[];
+      if (a.is_blocking != null) fields.is_blocking = Boolean(a.is_blocking);
+      if (a.enabled != null) fields.enabled = Boolean(a.enabled);
+      
+      await updatePipelineStep(key, fields);
+      await logMcpAction("update_pipeline_step", { agent_key: key, ...fields }, "updated");
+      return { text: `Pipeline step for "${key}" updated successfully.`, data: { ok: true } };
+    },
+  },
+  {
+    name: "telugulo_add_agent",
+    description: "Create a new AI agent in the registry and insert it as a step in the pipeline. IMPORTANT: pass confirm=true to apply.",
+    inputSchema: obj(
+      {
+        agent_key: str("Unique lowercase slug for the agent, e.g. 'seo_checker'."),
+        display_name: str("Human-readable name, e.g. 'SEO Checker'."),
+        instructions: str("Behavior / system prompt for this agent."),
+        model_tier: str("Model tier: cheap | mid | best (default 'mid')."),
+        insert_after: str("The agent_key to insert this new step after, e.g. 'writer'."),
+        is_blocking: bool("If true, failure at this step halts the pipeline (default false)."),
+        confirm: bool("Must be true to add agent."),
+      },
+      ["agent_key", "display_name", "instructions", "insert_after"],
+    ),
+    handler: async (a) => {
+      const key = String(a.agent_key).trim().toLowerCase();
+      if (!key) throw new Error("agent_key is required");
+      if (!a.confirm) {
+        return {
+          text: `This will add a new agent "${a.display_name}" (${key}) after "${a.insert_after}". Re-call with confirm=true to apply.`,
+          data: { pending_confirmation: true },
+        };
+      }
+      
+      await addAgent({
+        agent_key: key,
+        display_name: String(a.display_name),
+        instructions: String(a.instructions),
+        model_tier: a.model_tier as any,
+        insert_after: String(a.insert_after),
+        is_blocking: a.is_blocking != null ? Boolean(a.is_blocking) : false,
+      });
+      
+      await logMcpAction("add_agent", { agent_key: key }, "created");
+      return { text: `Agent "${a.display_name}" (${key}) created and inserted into the pipeline.`, data: { ok: true } };
+    },
+  },
+  {
+    name: "telugulo_remove_agent",
+    description: "Soft-delete (disable) an agent from registry and pipeline. IMPORTANT: pass confirm=true to apply.",
+    inputSchema: obj(
+      {
+        agent_key: str("The agent_key to remove."),
+        confirm: bool("Must be true to apply deletion."),
+      },
+      ["agent_key"],
+    ),
+    handler: async (a) => {
+      const key = String(a.agent_key);
+      if (!a.confirm) {
+        return {
+          text: `This will disable the agent "${key}" in both registry and pipeline steps. Re-call with confirm=true to apply.`,
+          data: { pending_confirmation: true },
+        };
+      }
+      
+      await removeAgent(key);
+      await logMcpAction("remove_agent", { agent_key: key }, "disabled");
+      return { text: `Agent "${key}" disabled successfully.`, data: { ok: true } };
+    },
+  },
+  {
+    name: "telugulo_reorder_pipeline",
+    description: "Bulk rewrite the entire pipeline steps flow in one call. IMPORTANT: pass confirm=true to apply.",
+    inputSchema: obj(
+      {
+        steps: {
+          type: "array",
+          description: "Full list of steps with fields: agent_key, step_order, depends_on (array), is_blocking (optional).",
+          items: {
+            type: "object",
+            required: ["agent_key", "step_order", "depends_on"],
+            properties: {
+              agent_key: { type: "string" },
+              step_order: { type: "number" },
+              depends_on: { type: "array", items: { type: "string" } },
+              is_blocking: { type: "boolean" },
+            },
+          },
+        },
+        confirm: bool("Must be true to apply."),
+      },
+      ["steps"],
+    ),
+    handler: async (a) => {
+      if (!Array.isArray(a.steps)) throw new Error("steps must be an array");
+      if (!a.confirm) {
+        return {
+          text: `This will overwrite the entire pipeline configuration with ${a.steps.length} steps. Re-call with confirm=true to apply.`,
+          data: { pending_confirmation: true },
+        };
+      }
+      
+      await reorderPipeline(a.steps as any);
+      await logMcpAction("reorder_pipeline", { count: a.steps.length }, "reordered");
+      return { text: "Pipeline reordered successfully.", data: { ok: true } };
     },
   },
 ];

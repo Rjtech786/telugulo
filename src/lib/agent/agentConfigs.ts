@@ -28,12 +28,12 @@ export type AgentConfig = {
 };
 
 export function isAgentKey(k: string): k is AgentKey {
-  return (AGENT_KEYS as readonly string[]).includes(k);
+  return typeof k === "string" && k.trim().length > 0;
 }
 
 export async function listAgentConfigs(): Promise<AgentConfig[]> {
   const supabase = createAdminClient();
-  const { data, error } = await supabase.from("agent_configs").select("*").order("agent_key");
+  const { data, error } = await supabase.from("agent_registry").select("*").order("agent_key");
   if (error) throw error;
   return (data as AgentConfig[]) ?? [];
 }
@@ -41,7 +41,7 @@ export async function listAgentConfigs(): Promise<AgentConfig[]> {
 export async function getAgentConfig(agentKey: AgentKey): Promise<AgentConfig | null> {
   const supabase = createAdminClient();
   const { data, error } = await supabase
-    .from("agent_configs")
+    .from("agent_registry")
     .select("*")
     .eq("agent_key", agentKey)
     .maybeSingle();
@@ -55,7 +55,7 @@ export async function updateAgentConfig(
 ): Promise<void> {
   const supabase = createAdminClient();
   const { error } = await supabase
-    .from("agent_configs")
+    .from("agent_registry")
     .upsert({ agent_key: agentKey, ...fields }, { onConflict: "agent_key" });
   if (error) throw error;
 }
