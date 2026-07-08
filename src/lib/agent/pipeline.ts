@@ -200,6 +200,15 @@ Execute your task and reply with a JSON object summarizing your execution result
 No preamble, no explanation, only valid JSON.
 `;
 
+class PipelineEarlyExit extends Error {
+  status: FinalStatus;
+  constructor(status: FinalStatus, message: string) {
+    super(message);
+    this.status = status;
+    this.name = "PipelineEarlyExit";
+  }
+}
+
 export async function runPipeline(
   existingRunId?: string,
   trigger: RunTrigger = "cron",
@@ -321,416 +330,453 @@ export async function runPipeline(
     let imageUrl: string | null = null;
     let qualityNote = "Quality check off hai (settings me disabled).";
     let hasRunVerify = false;
+    const completedAgents = new Set<string>();
 
     // Iterate through step groups sequentially
     for (const order of stepOrders) {
       const groupSteps = activeSteps.filter((s) => s.step_order === order);
       
-      // Execute steps in group
-      for (const stepObj of groupSteps) {
-        const agentKey = stepObj.agent_key;
-
-        // ── STAGE: TOPIC SCOUT & DUPLICATE GUARD ──
-        if (agentKey === "topic_scout" || agentKey === "dup_guard") {
-          // If we already selected the candidate topic, skip running selection again
-          if (cand) continue;
-
-          await note("topic_scout", "ceo_to_agent", "working", "Naya V3 run start — Topic Scout ko topics dhoondne bhej raha hoon.");
-          const t1 = Date.now();
-          const candidates = await discoverCandidates();
-          if (candidates.length === 0) {
-            await note("topic_scout", "agent_to_ceo", "failed", "Aaj koi candidate topic nahi mila (RSS empty).");
-            stage("topic_scout", "0 candidates");
-            return finishAs("skipped", "No candidate topics found today");
-          }
-          await note("topic_scout", "agent_to_ceo", "done", `${candidates.length} candidate topics RSS se mile.`);
-
-          const { data: recentRows } = await supabase
-            .from("articles")
-            .select("title")
-            .order("created_at", { ascending: false })
-            .limit(20);
-          const recentTitles = (recentRows ?? []).map((r) => r.title as string);
-
-          const sel = await step("topic_scout", "chunaav", {
-            system: SYSTEM_EDITOR,
-            prompt: selectionPrompt(candidates, Math.min(4, candidates.length), recentTitles),
-            maxTokens: 600,
-            temperature: 0.4,
-          });
-          const selection = parseJson<{
-            skip: boolean;
-            skipReason?: string;
-            choices: { index: number; reason: string }[];
-          }>(sel.text);
-          if (selection.skip || !selection.choices?.length) {
-            const reason = selection.skipReason || "Editor skipped — no strong topic today";
-            await note("topic_scout", "agent_to_ceo", "failed", `Koi topic itna strong nahi laga: ${reason}`);
-            stage("topic_scout", `skipped: ${reason}`, { ms: Date.now() - t1 });
-            return finishAs("skipped", reason);
-          }
-
-          const scoutCfg = await getAgentConfig("topic_scout");
-          const dupCfg = await getAgentConfig("dup_guard");
-          let lastSkip: { status: FinalStatus; reason: string } = { status: "skipped", reason: "No eligible topic" };
-
-          for (const choice of selection.choices) {
-            const c = candidates[choice.index - 1];
-            if (!c) continue;
-
-            // Niche filter
-            if (scoutCfg?.enabled !== false) {
-              try {
-                const nf = parseJson<{ on_niche: boolean; reason: string }>(
-                  (await runAgentStep("topic_scout", "niche_filter", {
-                    system: assembleAgentSystem(SYSTEM_EDITOR, scoutCfg, []),
-                    prompt: nicheFilterPrompt(c.title),
-                    maxTokens: 200,
-                    temperature: 0,
-                  }, scoutCfg)).text,
-                );
-                if (!nf.on_niche) {
-                  await note("topic_scout", "agent_to_ceo", "failed", `Off-niche skip: "${c.title}" (${nf.reason})`);
-                  lastSkip = { status: "skipped_off_niche", reason: `Off-niche: ${c.title} — ${nf.reason}` };
-                  continue;
-                }
-              } catch { /* allow through */ }
+      // Execute steps in group in parallel
+      await Promise.all(
+        groupSteps.map(async (stepObj) => {
+          const agentKey = stepObj.agent_key;
+          
+          // Check depends_on
+          if (stepObj.depends_on && stepObj.depends_on.length > 0) {
+            for (const dep of stepObj.depends_on) {
+              const isDepActive = activeSteps.some((s) => s.agent_key === dep);
+              if (isDepActive && !completedAgents.has(dep)) {
+                throw new Error(`Dependency not met: ${dep} must run before ${agentKey}`);
+              }
             }
-
-            // Duplicate Guard
-            const trg = await checkDuplicate(c.title);
-            let isDup = !trg.pass;
-            let dupReason = trg.detail;
-            if (!isDup && dupCfg?.enabled !== false) {
-              try {
-                const sem = parseJson<{ is_duplicate: boolean; matching_title?: string; reason?: string }>(
-                  (await runAgentStep("dup_guard", "dup_check", {
-                    system: assembleAgentSystem(SYSTEM_EDITOR, dupCfg, []),
-                    prompt: dupSemanticPrompt(c.title, recentTitles),
-                    maxTokens: 250,
-                    temperature: 0,
-                  }, dupCfg)).text,
-                );
-                if (sem.is_duplicate) {
-                  isDup = true;
-                  dupReason = `duplicate of "${sem.matching_title}" — ${sem.reason ?? ""}`;
-                }
-              } catch { /* semantic check failed — trigram already passed */ }
-            }
-            if (isDup) {
-              await note("topic_scout", "agent_to_ceo", "failed", `Duplicate skip: "${c.title}" (${dupReason})`);
-              lastSkip = { status: "skipped_duplicate", reason: `Duplicate: ${c.title} — ${dupReason}` };
-              continue;
-            }
-
-            cand = c;
-            break;
           }
 
-          if (!cand) {
-            stage("topic_scout", lastSkip.reason, { ms: Date.now() - t1 });
-            await note("ceo", "ceo_to_agent", "done", `Aaj koi eligible topic nahi bacha (${lastSkip.reason}).`);
-            return finishAs(lastSkip.status, lastSkip.reason);
-          }
-          stage("topic_scout", `picked "${cand.title}"`, { ms: Date.now() - t1 });
-          await note("topic_scout", "agent_to_ceo", "done", `Topic final: "${cand.title}" (niche + duplicate check pass)`);
-        }
+          try {
+            // ── STAGE: TOPIC SCOUT & DUPLICATE GUARD ──
+            if (agentKey === "topic_scout" || agentKey === "dup_guard") {
+              // If we already selected the candidate topic, skip running selection again
+              if (cand) {
+                completedAgents.add(agentKey);
+                return;
+              }
 
-        // ── STAGE: RESEARCHER ──
-        else if (agentKey === "researcher") {
-          if (!cand) continue;
-          await note("researcher", "ceo_to_agent", "working", `Researcher ko facts table banane bhej raha hoon: "${cand.title}"`);
-          const t2 = Date.now();
-          const research = await buildFactsTable(cand.title, researchSettings.min_sources, {
-            link: cand.link,
-            source: cand.source,
-          });
-          if (!research) {
-            await note("researcher", "agent_to_ceo", "failed", "Research me kuch nahi mila — run skip.");
-            stage("researcher", "no research", { ms: Date.now() - t2 });
-            return finishAs("skipped", "Research produced nothing");
-          }
-          facts = research.table;
-          factsBlock = renderFactsForPrompt(facts, research.rawText);
-          if (pipeId) void updatePipelineRun(pipeId, { facts_table: facts });
-          stage("researcher", `${facts.facts.length} facts, ${facts.sources.length} resolved sources`, { ms: Date.now() - t2 });
-          await note("researcher", "agent_to_ceo", "done", `${facts.facts.length} facts + ${facts.sources.length} real source(s) ka facts table ready.`);
-        }
+              await note("topic_scout", "ceo_to_agent", "working", "Naya V3 run start — Topic Scout ko topics dhoondne bhej raha hoon.");
+              const t1 = Date.now();
+              const candidates = await discoverCandidates();
+              if (candidates.length === 0) {
+                await note("topic_scout", "agent_to_ceo", "failed", "Aaj koi candidate topic nahi mila (RSS empty).");
+                stage("topic_scout", "0 candidates");
+                throw new PipelineEarlyExit("skipped", "No candidate topics found today");
+              }
+              await note("topic_scout", "agent_to_ceo", "done", `${candidates.length} candidate topics RSS se mile.`);
 
-        // ── STAGE: WRITER ──
-        else if (agentKey === "writer") {
-          if (!factsBlock) continue;
-          await note("writer", "ceo_to_agent", "working", "Writer ko angle + article likhne bhej raha hoon (facts table se).");
-          const t3 = Date.now();
-          const angleRes = await step("writer", "angle", {
-            system: SYSTEM_EDITOR,
-            prompt: anglePrompt(cand.title, factsBlock),
-            maxTokens: 400,
-            temperature: 0.7,
-          });
+              const { data: recentRows } = await supabase
+                .from("articles")
+                .select("title")
+                .order("created_at", { ascending: false })
+                .limit(20);
+              const recentTitles = (recentRows ?? []).map((r) => r.title as string);
 
-          const writerCfg = await getAgentConfig("writer");
-          const writerNotes = await getAgentSkillNotes("writer");
-          const writerPromptText = writerV3Prompt({
-            topic: cand.title,
-            factsBlock,
-            angle: angleRes.text,
-            minWords,
-            maxWords,
-            tone: general.tone,
-            rules,
-          });
-          const writerPersona = getWriterPersona(cand.title);
-          let written = await runAgentStep("writer", "writing", {
-            system: assembleAgentSystem(writerPersona, writerCfg, writerNotes),
-            prompt: writerPromptText,
-            maxTokens: 8000,
-            temperature: 0.8,
-          }, writerCfg);
-          if (written.usedFallback) {
-            await note("ceo", "ceo_to_agent", "fixed",
-              `Writer ka primary model fail hua (${written.primaryError ?? "error"}) — ${written.usedFallback} par chala.`);
-          }
-          article = parseArticleFields(written.text);
-          if (!article.headline || !article.body) {
-            await note("writer", "agent_to_ceo", "fixed",
-              "Output format galat tha — strict format reminder ke saath dobara likhwa raha hoon.",
-              `RAW OUTPUT (first 500 chars):\n${written.text.slice(0, 500)}`);
-            written = await runAgentStep("writer", "writing", {
-              system: assembleAgentSystem(writerPersona, writerCfg, writerNotes),
-              prompt:
-                writerPromptText +
-                "\n\nCRITICAL REMINDER: respond ONLY in the exact labeled format above (HEADLINE: / TITLE_META: / ... / BODY:). No preamble, no JSON, no markdown fences around the whole answer, no bold labels.",
-              maxTokens: 8000,
-              temperature: 0.6,
-            }, writerCfg);
-            article = parseArticleFields(written.text);
-          }
-          if (!article.headline || !article.body) {
-            await note("writer", "agent_to_ceo", "failed", "Article likhne me format error aaya (retry ke baad bhi).",
-              `RAW OUTPUT (first 500 chars):\n${written.text.slice(0, 500)}`);
-            if (pipeId) void updatePipelineRun(pipeId, { failure_report: { error: "unparseable article", raw: written.text.slice(0, 1500) } });
-            throw new Error("Writing step returned an unparseable article");
-          }
-          article.headline = normalizeDigits(article.headline);
-          article.title_meta = normalizeDigits(article.title_meta);
-          article.meta_description = normalizeDigits(article.meta_description);
-          article.summary = normalizeDigits(article.summary);
-          article.body = normalizeDigits(article.body);
-
-          // Code-side word-count enforcement
-          let words = wordCount(article.body);
-          let expandAttempts = 0;
-          while (words < minWords && !article.flag_short && expandAttempts < 2) {
-            expandAttempts++;
-            await note("writer", "agent_to_ceo", "fixed", `Sirf ${words} words — unused facts ke saath expand attempt ${expandAttempts}/2.`);
-            const used = article.body;
-            const unused = facts!.facts.filter((f) => {
-              const key = f.fact.match(/[A-Za-z0-9]{3,}/g)?.[0];
-              return key ? !used.includes(key) : true;
-            }).map((f) => f.fact);
-            try {
-              const expanded = await runAgentStep("fixer", "fixer", {
+              const sel = await step("topic_scout", "chunaav", {
                 system: SYSTEM_EDITOR,
-                prompt: expandPrompt(article.body, unused.slice(0, 12), minWords),
-                maxTokens: 8000,
-                temperature: 0.5,
-              });
-              const newBody = stripFences(expanded.text);
-              if (wordCount(newBody) > words) article.body = newBody;
-            } catch { break; }
-            words = wordCount(article.body);
-          }
-          stage("writer", `"${article.headline}" — ${words} words`, {
-            ms: Date.now() - t3,
-            word_count: words,
-            output_tokens: written.outputTokens,
-          });
-          await note("writer", "agent_to_ceo", "done", `"${article.headline}" likh diya (~${words} words${article.flag_short ? ", flag_short" : ""}).`);
-
-          // Quality & Humanizer agent check
-          body = article.body;
-          if (qualityRules.self_check) {
-            await note("quality" as AgentId, "ceo_to_agent", "working", "Quality & Humanizer ko bhej raha hoon.");
-            try {
-              const checked = await step("quality" as AgentId, "quality_check", {
-                system: SYSTEM_EDITOR,
-                prompt: qualityHumanizePrompt(body, rules, qualityRules),
-                maxTokens: 8000,
+                prompt: selectionPrompt(candidates, Math.min(4, candidates.length), recentTitles),
+                maxTokens: 600,
                 temperature: 0.4,
               });
-              const { verdict, body: fixedBody } = parseQualityOutput(checked.text);
-              qualityNote = verdict;
-              if (fixedBody.length > body.length * 0.5) {
-                body = fixedBody;
-                await note("quality" as AgentId, "agent_to_ceo", "fixed", verdict);
-              } else {
-                await note("quality" as AgentId, "agent_to_ceo", "done", `${verdict} (original rakha)`);
+              const selection = parseJson<{
+                skip: boolean;
+                skipReason?: string;
+                choices: { index: number; reason: string }[];
+              }>(sel.text);
+              if (selection.skip || !selection.choices?.length) {
+                const reason = selection.skipReason || "Editor skipped — no strong topic today";
+                await note("topic_scout", "agent_to_ceo", "failed", `Koi topic itna strong nahi laga: ${reason}`);
+                stage("topic_scout", `skipped: ${reason}`, { ms: Date.now() - t1 });
+                throw new PipelineEarlyExit("skipped", reason);
               }
-            } catch (e) {
-              qualityNote = "Skipped (error) — original body rakha.";
-              await note("quality" as AgentId, "agent_to_ceo", "failed", `Error: ${e instanceof Error ? e.message : "unknown"}`);
+
+              const scoutCfg = await getAgentConfig("topic_scout");
+              const dupCfg = await getAgentConfig("dup_guard");
+              let lastSkip: { status: FinalStatus; reason: string } = { status: "skipped", reason: "No eligible topic" };
+
+              for (const choice of selection.choices) {
+                const c = candidates[choice.index - 1];
+                if (!c) continue;
+
+                // Niche filter
+                if (scoutCfg?.enabled !== false) {
+                  try {
+                    const nf = parseJson<{ on_niche: boolean; reason: string }>(
+                      (await runAgentStep("topic_scout", "niche_filter", {
+                        system: assembleAgentSystem(SYSTEM_EDITOR, scoutCfg, []),
+                        prompt: nicheFilterPrompt(c.title),
+                        maxTokens: 200,
+                        temperature: 0,
+                      }, scoutCfg)).text,
+                    );
+                    if (!nf.on_niche) {
+                      await note("topic_scout", "agent_to_ceo", "failed", `Off-niche skip: "${c.title}" (${nf.reason})`);
+                      lastSkip = { status: "skipped_off_niche", reason: `Off-niche: ${c.title} — ${nf.reason}` };
+                      continue;
+                    }
+                  } catch { /* allow through */ }
+                }
+
+                // Duplicate Guard
+                const trg = await checkDuplicate(c.title);
+                let isDup = !trg.pass;
+                let dupReason = trg.detail;
+                if (!isDup && dupCfg?.enabled !== false) {
+                  try {
+                    const sem = parseJson<{ is_duplicate: boolean; matching_title?: string; reason?: string }>(
+                      (await runAgentStep("dup_guard", "dup_check", {
+                        system: assembleAgentSystem(SYSTEM_EDITOR, dupCfg, []),
+                        prompt: dupSemanticPrompt(c.title, recentTitles),
+                        maxTokens: 250,
+                        temperature: 0,
+                      }, dupCfg)).text,
+                    );
+                    if (sem.is_duplicate) {
+                      isDup = true;
+                      dupReason = `duplicate of "${sem.matching_title}" — ${sem.reason ?? ""}`;
+                    }
+                  } catch { /* semantic check failed — trigram already passed */ }
+                }
+                if (isDup) {
+                  await note("topic_scout", "agent_to_ceo", "failed", `Duplicate skip: "${c.title}" (${dupReason})`);
+                  lastSkip = { status: "skipped_duplicate", reason: `Duplicate: ${c.title} — ${dupReason}` };
+                  continue;
+                }
+
+                cand = c;
+                break;
+              }
+
+              if (!cand) {
+                stage("topic_scout", lastSkip.reason, { ms: Date.now() - t1 });
+                await note("ceo", "ceo_to_agent", "done", `Aaj koi eligible topic nahi bacha (${lastSkip.reason}).`);
+                throw new PipelineEarlyExit(lastSkip.status, lastSkip.reason);
+              }
+              stage("topic_scout", `picked "${cand.title}"`, { ms: Date.now() - t1 });
+              await note("topic_scout", "agent_to_ceo", "done", `Topic final: "${cand.title}" (niche + duplicate check pass)`);
             }
-          }
-        }
 
-        // ── STAGE: VERIFYING / REVIEWERS (fact_checker, language_editor, discover_checker, dynamic reviewers) ──
-        else if (stepObj.step_order > 4 && stepObj.step_order < 6) {
-          if (!article || hasRunVerify) continue;
-          hasRunVerify = true; // Run verify mode exactly once when we hit the first reviewer step
-
-          const category = (article.category || "tech").toLowerCase();
-          const { data: candRows } = await supabase
-            .from("articles")
-            .select("title, slug")
-            .eq("status", "published")
-            .eq("category", category)
-            .order("published_at", { ascending: false })
-            .limit(8);
-          const linkCandidates = (candRows ?? []) as { title: string; slug: string }[];
-
-          await note("seo", "ceo_to_agent", "working", "Verify Mode start — reviewer agents running.");
-          const t4 = Date.now();
-          verify = await runVerifyMode(
-            {
-              headline: article.headline,
-              title_meta: article.title_meta,
-              meta_description: article.meta_description,
-              body,
-            },
-            factsBlock,
-            linkCandidates,
-            async (msg, agent, status) => {
-              await note((agent ?? "ceo") as AgentId, agent ? "agent_to_ceo" : "ceo_to_agent", status ?? "working", msg);
-            },
-            minWords,
-            rules,
-          );
-          body = stripInlineSourcesSection(insertInternalLinks(verify.article.body, verify.internalLinks));
-
-          // Post-verify word count expansion
-          if (wordCount(body) < minWords && !article.flag_short && facts?.facts?.length) {
-            await note("writer", "ceo_to_agent", "working", `Verify ke baad body ${wordCount(body)} words reh gayi — unused facts se re-expand kar raha hoon.`);
-            const unused = facts.facts
-              .filter((f) => {
-                const key = f.fact.match(/[A-Za-z0-9]{3,}/g)?.[0];
-                return key ? !body.includes(key) : true;
-              })
-              .map((f) => f.fact);
-            try {
-              const expanded = await runAgentStep("fixer", "fixer", {
-                system: SYSTEM_EDITOR,
-                prompt: expandPrompt(body, unused.slice(0, 12), minWords),
-                maxTokens: 8000,
-                temperature: 0.5,
+            // ── STAGE: RESEARCHER ──
+            else if (agentKey === "researcher") {
+              if (!cand) return;
+              await note("researcher", "ceo_to_agent", "working", `Researcher ko facts table banane bhej raha hoon: "${cand.title}"`);
+              const t2 = Date.now();
+              const research = await buildFactsTable(cand.title, researchSettings.min_sources, {
+                link: cand.link,
+                source: cand.source,
               });
-              const newBody = stripFences(expanded.text);
-              if (wordCount(newBody) > wordCount(body)) {
-                body = newBody;
-                await note("writer", "agent_to_ceo", "fixed", `Re-expand ho gaya — ab ${wordCount(body)} words.`);
+              if (!research) {
+                await note("researcher", "agent_to_ceo", "failed", "Research me kuch nahi mila — run skip.");
+                stage("researcher", "no research", { ms: Date.now() - t2 });
+                throw new PipelineEarlyExit("skipped", "Research produced nothing");
               }
-            } catch { /* do nothing */ }
-          }
-          
-          article.headline = verify.article.headline;
-          article.title_meta = verify.article.title_meta;
-          article.meta_description = verify.article.meta_description;
+              facts = research.table;
+              factsBlock = renderFactsForPrompt(facts, research.rawText);
+              if (pipeId) void updatePipelineRun(pipeId, { facts_table: facts });
+              stage("researcher", `${facts.facts.length} facts, ${facts.sources.length} resolved sources`, { ms: Date.now() - t2 });
+              await note("researcher", "agent_to_ceo", "done", `${facts.facts.length} facts + ${facts.sources.length} real source(s) ka facts table ready.`);
+            }
 
-          if (pipeId) void updatePipelineRun(pipeId, { reviewer_scores: { ...verify.scores, loops: verify.loops } });
-          stage("verify", `${verify.passed ? "PASSED" : "FAILED"} — fact=${verify.scores.fact} lang=${verify.scores.language} discover=${verify.scores.discover}, ${verify.loops} loop(s)`, { ms: Date.now() - t4 });
-          await note("seo", "agent_to_ceo", verify.passed ? "done" : "failed",
-            `Verify ${verify.passed ? "PASS" : "FAIL"} (fact ${verify.scores.fact}/10, language ${verify.scores.language}/10, discover ${verify.scores.discover}/10, ${verify.loops} loop).`);
-        }
+            // ── STAGE: WRITER ──
+            else if (agentKey === "writer") {
+              if (!factsBlock) return;
+              await note("writer", "ceo_to_agent", "working", "Writer ko angle + article likhne bhej raha hoon (facts table se).");
+              const t3 = Date.now();
+              const angleRes = await step("writer", "angle", {
+                system: SYSTEM_EDITOR,
+                prompt: anglePrompt(cand.title, factsBlock),
+                maxTokens: 400,
+                temperature: 0.7,
+              });
 
-        // ── STAGE: FIXER ──
-        else if (agentKey === "fixer") {
-          // Handled inside Verify Mode, so no-op.
-          continue;
-        }
+              const writerCfg = await getAgentConfig("writer");
+              const writerNotes = await getAgentSkillNotes("writer");
+              const writerPromptText = writerV3Prompt({
+                topic: cand.title,
+                factsBlock,
+                angle: angleRes.text,
+                minWords,
+                maxWords,
+                tone: general.tone,
+                rules,
+              });
+              const writerPersona = getWriterPersona(cand.title);
+              let written = await runAgentStep("writer", "writing", {
+                system: assembleAgentSystem(writerPersona, writerCfg, writerNotes),
+                prompt: writerPromptText,
+                maxTokens: 8000,
+                temperature: 0.8,
+              }, writerCfg);
+              if (written.usedFallback) {
+                await note("ceo", "ceo_to_agent", "fixed",
+                  `Writer ka primary model fail hua (${written.primaryError ?? "error"}) — ${written.usedFallback} par chala.`);
+              }
+              article = parseArticleFields(written.text);
+              if (!article.headline || !article.body) {
+                await note("writer", "agent_to_ceo", "fixed",
+                  "Output format galat tha — strict format reminder ke saath dobara likhwa raha hoon.",
+                  `RAW OUTPUT (first 500 chars):\n${written.text.slice(0, 500)}`);
+                written = await runAgentStep("writer", "writing", {
+                  system: assembleAgentSystem(writerPersona, writerCfg, writerNotes),
+                  prompt:
+                    writerPromptText +
+                    "\n\nCRITICAL REMINDER: respond ONLY in the exact labeled format above (HEADLINE: / TITLE_META: / ... / BODY:). No preamble, no JSON, no markdown fences around the whole answer, no bold labels.",
+                  maxTokens: 8000,
+                  temperature: 0.6,
+                }, writerCfg);
+                article = parseArticleFields(written.text);
+              }
+              if (!article.headline || !article.body) {
+                await note("writer", "agent_to_ceo", "failed", "Article likhne me format error aaya (retry ke baad bhi).",
+                  `RAW OUTPUT (first 500 chars):\n${written.text.slice(0, 500)}`);
+                if (pipeId) void updatePipelineRun(pipeId, { failure_report: { error: "unparseable article", raw: written.text.slice(0, 1500) } });
+                throw new Error("Writing step returned an unparseable article");
+              }
+              article.headline = normalizeDigits(article.headline);
+              article.title_meta = normalizeDigits(article.title_meta);
+              article.meta_description = normalizeDigits(article.meta_description);
+              article.summary = normalizeDigits(article.summary);
+              article.body = normalizeDigits(article.body);
 
-        // ── STAGE: IMAGE AGENT ──
-        else if (agentKey === "image_agent") {
-          if (!article) continue;
-          if (features.image_generation) {
-            await note("image" as AgentId, "ceo_to_agent", "working", "Image agent ko header image banane bhej raha hoon.");
-            try {
-              const img = await runImage(imagePrompt(article.headline, article.category || "tech"));
-              imageUrl = await uploadArticleImage(img.bytes, img.contentType, article.slug || sanitizeSlug(article.headline));
-              await note("image" as AgentId, "agent_to_ceo", "done", "Header image ban gaya + upload ho gaya.");
-            } catch (e) {
-              await note("image" as AgentId, "agent_to_ceo", "failed", `Image generation fail: ${e instanceof Error ? e.message : "error"}`);
-              if (stepObj.is_blocking) throw e;
+              // Code-side word-count enforcement
+              let words = wordCount(article.body);
+              let expandAttempts = 0;
+              while (words < minWords && !article.flag_short && expandAttempts < 2) {
+                expandAttempts++;
+                await note("writer", "agent_to_ceo", "fixed", `Sirf ${words} words — unused facts ke saath expand attempt ${expandAttempts}/2.`);
+                const used = article.body;
+                const unused = facts!.facts.filter((f) => {
+                  const key = f.fact.match(/[A-Za-z0-9]{3,}/g)?.[0];
+                  return key ? !used.includes(key) : true;
+                }).map((f) => f.fact);
+                try {
+                  const expanded = await runAgentStep("fixer", "fixer", {
+                    system: SYSTEM_EDITOR,
+                    prompt: expandPrompt(article.body, unused.slice(0, 12), minWords),
+                    maxTokens: 8000,
+                    temperature: 0.5,
+                  });
+                  const newBody = stripFences(expanded.text);
+                  if (wordCount(newBody) > words) article.body = newBody;
+                } catch { break; }
+                words = wordCount(article.body);
+              }
+              stage("writer", `"${article.headline}" — ${words} words`, {
+                ms: Date.now() - t3,
+                word_count: words,
+                output_tokens: written.outputTokens,
+              });
+              await note("writer", "agent_to_ceo", "done", `"${article.headline}" likh diya (~${words} words${article.flag_short ? ", flag_short" : ""}).`);
+
+              // Quality & Humanizer agent check
+              body = article.body;
+              if (qualityRules.self_check) {
+                await note("quality" as AgentId, "ceo_to_agent", "working", "Quality & Humanizer ko bhej raha hoon.");
+                try {
+                  const checked = await step("quality" as AgentId, "quality_check", {
+                    system: SYSTEM_EDITOR,
+                    prompt: qualityHumanizePrompt(body, rules, qualityRules),
+                    maxTokens: 8000,
+                    temperature: 0.4,
+                  });
+                  const { verdict, body: fixedBody } = parseQualityOutput(checked.text);
+                  qualityNote = verdict;
+                  if (fixedBody.length > body.length * 0.5) {
+                    body = fixedBody;
+                    await note("quality" as AgentId, "agent_to_ceo", "fixed", verdict);
+                  } else {
+                    await note("quality" as AgentId, "agent_to_ceo", "done", `${verdict} (original rakha)`);
+                  }
+                } catch (e) {
+                  qualityNote = "Skipped (error) — original body rakha.";
+                  await note("quality" as AgentId, "agent_to_ceo", "failed", `Error: ${e instanceof Error ? e.message : "unknown"}`);
+                }
+              }
+            }
+
+            // ── STAGE: VERIFYING / REVIEWERS (fact_checker, language_editor, discover_checker, dynamic reviewers) ──
+            else if (stepObj.step_order > 4 && stepObj.step_order < 6) {
+              if (!article) return;
+              if (hasRunVerify) {
+                completedAgents.add(agentKey);
+                return;
+              }
+              hasRunVerify = true; // Run verify mode exactly once when we hit the first reviewer step
+
+              const category = (article.category || "tech").toLowerCase();
+              const { data: candRows } = await supabase
+                .from("articles")
+                .select("title, slug")
+                .eq("status", "published")
+                .eq("category", category)
+                .order("published_at", { ascending: false })
+                .limit(8);
+              const linkCandidates = (candRows ?? []) as { title: string; slug: string }[];
+
+              await note("seo", "ceo_to_agent", "working", "Verify Mode start — reviewer agents running.");
+              const t4 = Date.now();
+              verify = await runVerifyMode(
+                {
+                  headline: article.headline,
+                  title_meta: article.title_meta,
+                  meta_description: article.meta_description,
+                  body,
+                },
+                factsBlock,
+                linkCandidates,
+                async (msg, agent, status) => {
+                  await note((agent ?? "ceo") as AgentId, agent ? "agent_to_ceo" : "ceo_to_agent", status ?? "working", msg);
+                },
+                minWords,
+                rules,
+              );
+              body = stripInlineSourcesSection(insertInternalLinks(verify.article.body, verify.internalLinks));
+
+              // Post-verify word count expansion
+              if (wordCount(body) < minWords && !article.flag_short && facts?.facts?.length) {
+                await note("writer", "ceo_to_agent", "working", `Verify ke baad body ${wordCount(body)} words reh gayi — unused facts se re-expand kar raha hoon.`);
+                const unused = facts.facts
+                  .filter((f) => {
+                    const key = f.fact.match(/[A-Za-z0-9]{3,}/g)?.[0];
+                    return key ? !body.includes(key) : true;
+                  })
+                  .map((f) => f.fact);
+                try {
+                  const expanded = await runAgentStep("fixer", "fixer", {
+                    system: SYSTEM_EDITOR,
+                    prompt: expandPrompt(body, unused.slice(0, 12), minWords),
+                    maxTokens: 8000,
+                    temperature: 0.5,
+                  });
+                  const newBody = stripFences(expanded.text);
+                  if (wordCount(newBody) > wordCount(body)) {
+                    body = newBody;
+                    await note("writer", "agent_to_ceo", "fixed", `Re-expand ho gaya — ab ${wordCount(body)} words.`);
+                  }
+                } catch { /* do nothing */ }
+              }
+              
+              article.headline = verify.article.headline;
+              article.title_meta = verify.article.title_meta;
+              article.meta_description = verify.article.meta_description;
+
+              if (pipeId) void updatePipelineRun(pipeId, { reviewer_scores: { ...verify.scores, loops: verify.loops } });
+              stage("verify", `${verify.passed ? "PASSED" : "FAILED"} — fact=${verify.scores.fact} lang=${verify.scores.language} discover=${verify.scores.discover}, ${verify.loops} loop(s)`, { ms: Date.now() - t4 });
+              await note("seo", "agent_to_ceo", verify.passed ? "done" : "failed",
+                `Verify ${verify.passed ? "PASS" : "FAIL"} (fact ${verify.scores.fact}/10, language ${verify.scores.language}/10, discover ${verify.scores.discover}/10, ${verify.loops} loop).`);
+            }
+
+            // ── STAGE: FIXER ──
+            else if (agentKey === "fixer") {
+              // Handled inside Verify Mode, so no-op.
+              completedAgents.add(agentKey);
+              return;
+            }
+
+            // ── STAGE: IMAGE AGENT ──
+            else if (agentKey === "image_agent") {
+              if (!article) return;
+              if (features.image_generation) {
+                await note("image" as AgentId, "ceo_to_agent", "working", "Image agent ko header image banane bhej raha hoon.");
+                try {
+                  const img = await runImage(imagePrompt(article.headline, article.category || "tech"));
+                  imageUrl = await uploadArticleImage(img.bytes, img.contentType, article.slug || sanitizeSlug(article.headline));
+                  await note("image" as AgentId, "agent_to_ceo", "done", "Header image ban gaya + upload ho gaya.");
+                } catch (e) {
+                  await note("image" as AgentId, "agent_to_ceo", "failed", `Image generation fail: ${e instanceof Error ? e.message : "error"}`);
+                  if (stepObj.is_blocking) throw e;
+                }
+              }
+            }
+
+            // ── STAGE: GENERIC DYNAMIC POST-PROCESSING AGENTS (step_order >= 7) ──
+            else {
+              if (!article) return;
+              const cfg = await getAgentConfig(agentKey);
+              const notes = await getAgentSkillNotes(agentKey);
+              await note(agentKey as AgentId, "ceo_to_agent", "working", `${cfg?.display_name ?? agentKey} step starting.`);
+              try {
+                const promptText = genericStepPrompt(
+                  cfg?.display_name ?? agentKey,
+                  cfg?.instructions ?? "",
+                  {
+                    headline: article.headline,
+                    title_meta: article.title_meta,
+                    meta_description: article.meta_description,
+                    body,
+                  },
+                  factsBlock,
+                  imageUrl,
+                );
+
+                const res = await runAgentStep(agentKey, "self_check", {
+                  system: assembleAgentSystem(SYSTEM_EDITOR, cfg, notes),
+                  prompt: promptText,
+                  maxTokens: 2000,
+                  temperature: 0.5,
+                }, cfg);
+
+                const parsed = parseJson<{ status: string; message: string; output?: any }>(res.text);
+                if (parsed.status === "failed") {
+                  await note(agentKey as AgentId, "agent_to_ceo", "failed", parsed.message || "Failed.");
+                  if (stepObj.is_blocking) {
+                    throw new Error(`Blocking step ${agentKey} failed: ${parsed.message}`);
+                  }
+                } else {
+                  await note(agentKey as AgentId, "agent_to_ceo", "done", parsed.message || "Completed.");
+                }
+              } catch (e) {
+                const msg = e instanceof Error ? e.message : "error";
+                await note(agentKey as AgentId, "agent_to_ceo", "failed", `Error running dynamic step: ${msg}`);
+                if (stepObj.is_blocking) throw e;
+              }
+            }
+
+            completedAgents.add(agentKey);
+          } catch (error) {
+            if (error instanceof PipelineEarlyExit) {
+              throw error; // Let early exits bubble up to the main catch block to stop pipeline
+            }
+            const msg = error instanceof Error ? error.message : String(error);
+            await note(agentKey as AgentId, "agent_to_ceo", "failed", `Step execution failed: ${msg}`);
+            if (stepObj.is_blocking) {
+              throw error;
             }
           }
-        }
-
-        // ── STAGE: GENERIC DYNAMIC POST-PROCESSING AGENTS (step_order >= 7) ──
-        else {
-          if (!article) continue;
-          const cfg = await getAgentConfig(agentKey);
-          const notes = await getAgentSkillNotes(agentKey);
-          await note(agentKey as AgentId, "ceo_to_agent", "working", `${cfg?.display_name ?? agentKey} step starting.`);
-          try {
-            const promptText = genericStepPrompt(
-              cfg?.display_name ?? agentKey,
-              cfg?.instructions ?? "",
-              {
-                headline: article.headline,
-                title_meta: article.title_meta,
-                meta_description: article.meta_description,
-                body,
-              },
-              factsBlock,
-              imageUrl,
-            );
-
-            const res = await runAgentStep(agentKey, "self_check", {
-              system: assembleAgentSystem(SYSTEM_EDITOR, cfg, notes),
-              prompt: promptText,
-              maxTokens: 2000,
-              temperature: 0.5,
-            }, cfg);
-
-            const parsed = parseJson<{ status: string; message: string; output?: any }>(res.text);
-            if (parsed.status === "failed") {
-              await note(agentKey as AgentId, "agent_to_ceo", "failed", parsed.message || "Failed.");
-              if (stepObj.is_blocking) {
-                throw new Error(`Blocking step ${agentKey} failed: ${parsed.message}`);
-              }
-            } else {
-              await note(agentKey as AgentId, "agent_to_ceo", "done", parsed.message || "Completed.");
-            }
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : "error";
-            await note(agentKey as AgentId, "agent_to_ceo", "failed", `Error running dynamic step: ${msg}`);
-            if (stepObj.is_blocking) throw e;
-          }
-        }
-      }
+        })
+      );
     }
 
     if (!article) {
       throw new Error("No article was generated during pipeline execution");
     }
+    const activeArticle = article as ArticleFields;
+    const activeFacts = facts as FactsTable | null;
 
     // ── STAGE: SAVE & PUBLISH GATE ──
     const authorId = await getDefaultAuthorId();
-    const finalVerify = verify ?? { passed: false, scores: { fact: 0, language: 0, discover: 0 }, loops: 0, issues: [] };
-    const slug = await ensureUniqueSlug(sanitizeSlug(article.slug || article.headline));
+    const activeVerify = verify as VerifyResult | null;
+    const finalVerify = activeVerify ?? { passed: false, scores: { fact: 0, language: 0, discover: 0 }, loops: 0, issues: [] as any[] };
+    const slug = await ensureUniqueSlug(sanitizeSlug(activeArticle.slug || activeArticle.headline));
 
     const { data: draft, error } = await supabase
       .from("articles")
       .insert({
         slug,
-        title: article.headline,
-        title_meta: article.title_meta,
-        meta_description: article.meta_description,
-        summary: article.summary,
+        title: activeArticle.headline,
+        title_meta: activeArticle.title_meta,
+        meta_description: activeArticle.meta_description,
+        summary: activeArticle.summary,
         body,
-        category: (article.category || "tech").toLowerCase(),
+        category: (activeArticle.category || "tech").toLowerCase(),
         image_url: imageUrl,
         author_id: authorId,
-        source_urls: facts ? facts.sources.slice(0, 3).map((s) => ({ title: s.title, url: s.url, source: s.domain })) : [],
+        source_urls: activeFacts ? activeFacts.sources.slice(0, 3).map((s) => ({ title: s.title, url: s.url, source: s.domain })) : [],
         status: "draft",
         published_at: null,
       })
@@ -742,13 +788,13 @@ export async function runPipeline(
     const validators = await runHardValidators(
       {
         id: draft.id,
-        title: article.headline,
+        title: activeArticle.headline,
         slug,
         body,
         image_url: imageUrl,
-        source_urls: facts ? facts.sources.map((s) => ({ title: s.title, url: s.url, source: s.domain })) : [],
-        flag_short: article.flag_short,
-        factEntities: facts ? factEntities(facts) : [],
+        source_urls: activeFacts ? activeFacts.sources.map((s) => ({ title: s.title, url: s.url, source: s.domain })) : [],
+        flag_short: activeArticle.flag_short,
+        factEntities: activeFacts ? factEntities(activeFacts) : [],
       },
       { minWords, maxWords },
     );
@@ -781,7 +827,7 @@ export async function runPipeline(
           }),
         }).catch(() => {});
       }
-      await note("ceo", "ceo_to_agent", "done", `Publish Gate PASS — "${article.headline}" live ho gaya.`);
+      await note("ceo", "ceo_to_agent", "done", `Publish Gate PASS — "${activeArticle.headline}" live ho gaya.`);
     } else {
       gateFailure = {
         verify_passed: finalVerify.passed,
@@ -795,7 +841,7 @@ export async function runPipeline(
       log.push(`  Kept as DRAFT ${draft.id} (gate failed)`);
       if (general.auto_publish) {
         void notifyPipelineFailure({
-          title: article.headline,
+          title: activeArticle.headline,
           status: "draft_failed",
           issues: [
             ...failedChecks.map((f) => ({ severity: f.severity, problem: `${f.name}: ${f.detail}` })),
@@ -811,7 +857,7 @@ export async function runPipeline(
       const verdict = await step("ceo", "ceo", {
         system: SYSTEM_EDITOR,
         prompt: ceoVerdictPrompt({
-          title: article.headline,
+          title: activeArticle.headline,
           wordCount: wordCount(body),
           qualityNote: `${qualityNote} | verify: fact ${finalVerify.scores.fact}, language ${finalVerify.scores.language}, discover ${finalVerify.scores.discover} (${finalVerify.loops} loop)`,
           seoNote: validators.pass ? "hard validators sab pass" : `validators fail: ${failedChecks.map((f) => f.name).join(", ")}`,
@@ -823,12 +869,12 @@ export async function runPipeline(
       await note("ceo", "ceo_to_agent", "done", stripFences(verdict.text));
     } catch {
       await note("ceo", "ceo_to_agent", "done",
-        `Team ne kaam pura kiya — "${article.headline}" ${publishNow ? "publish ho gaya" : "draft me hai (review needed)"}.`);
+        `Team ne kaam pura kiya — "${activeArticle.headline}" ${publishNow ? "publish ho gaya" : "draft me hai (review needed)"}.`);
     }
 
     if (features.telegram_notifications) {
       try {
-        await notifyDraft({ id: draft.id, title: article.headline, summary: article.summary });
+        await notifyDraft({ id: draft.id, title: activeArticle.headline, summary: activeArticle.summary });
         log.push("  Telegram: notified");
       } catch (e) {
         log.push(`  Telegram: failed (${e instanceof Error ? e.message : "error"})`);
@@ -840,6 +886,9 @@ export async function runPipeline(
       { articleId: draft.id, articleTitle: draft.title, failure: gateFailure });
 
   } catch (e) {
+    if (e instanceof PipelineEarlyExit) {
+      return finishAs(e.status, e.message);
+    }
     const reason = e instanceof Error ? e.message : "unknown";
     log.push(`ERROR: ${reason}`);
     await note("ceo", "ceo_to_agent", "failed", `Run me error aaya: ${reason}`);
