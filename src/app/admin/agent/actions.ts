@@ -27,6 +27,8 @@ import {
 import { getGeneral, writeSetting, getFeatures, getQualityRules, setQualityRules } from "@/lib/settings";
 import { SETTINGS_KEYS, type ModelTier } from "@/lib/config";
 
+import { listPipelineSteps, type PipelineStep } from "@/lib/agent/pipelineSteps";
+
 export type SystemSettings = {
   systemOn: boolean; // features.article_generation
   publishTime: string; // "HH:MM" IST
@@ -40,14 +42,16 @@ export async function getV3Panel(): Promise<{
   pipelineRuns: PipelineRunRow[];
   autoPublish: boolean;
   system: SystemSettings;
+  pipelineSteps: PipelineStep[];
 }> {
   await requireAdmin();
-  const [configs, pipelineRuns, general, features, quality] = await Promise.all([
+  const [configs, pipelineRuns, general, features, quality, pipelineSteps] = await Promise.all([
     listAgentConfigs().catch(() => []),
     getRecentPipelineRuns(10).catch(() => []),
     getGeneral(),
     getFeatures(),
     getQualityRules(),
+    listPipelineSteps().catch(() => []),
   ]);
   return {
     configs,
@@ -59,6 +63,7 @@ export async function getV3Panel(): Promise<{
       minWords: quality.min_words,
       maxWords: quality.max_words,
     },
+    pipelineSteps,
   };
 }
 

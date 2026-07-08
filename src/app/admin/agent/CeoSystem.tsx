@@ -15,6 +15,7 @@ import {
 } from "./actions";
 import type { PipelineRunRow } from "@/lib/agent/pipelineRuns";
 import type { AgentConfig } from "@/lib/agent/agentConfigs";
+import type { PipelineStep } from "@/lib/agent/pipelineSteps";
 
 /**
  * Mission Control (spec §11.6) — dark, live agent-network view of the V3
@@ -185,9 +186,11 @@ const DEMO_V3: {
   pipelineRuns: PipelineRunRow[];
   autoPublish: boolean;
   system: { systemOn: boolean; publishTime: string; minWords: number; maxWords: number };
+  pipelineSteps: PipelineStep[];
 } = {
   autoPublish: true,
   system: { systemOn: true, publishTime: "08:00", minWords: 600, maxWords: 900 },
+  pipelineSteps: [],
   configs: AGENT_IDS.filter((a) => CONFIG_KEY[a]).map((a) => ({
     agent_key: CONFIG_KEY[a]!,
     display_name: AGENT_META[a].label,
@@ -237,6 +240,7 @@ export function CeoSystem({ demo = false }: { demo?: boolean }) {
   const [selected, setSelected] = useState<AgentNodeId | "ceo" | null>(null);
   const [selectedRun, setSelectedRun] = useState<PipelineRunRow | null>(null);
   const [runTab, setRunTab] = useState<"overview" | "timeline">("overview");
+  const [sideTab, setSideTab] = useState<"activity" | "pipeline">("activity");
   const seenCount = useRef(0);
   const liveRunId = useRef<string | null>(null);
 
@@ -707,39 +711,95 @@ export function CeoSystem({ demo = false }: { demo?: boolean }) {
             </div>
           ) : (
             <>
-              <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
-                <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Live activity</span>
-                <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#8b7cff]" style={{ animation: "mc-glow 1.4s infinite" }} />
-                  auto-refresh
-                </span>
-              </div>
-              <div className="flex-1 space-y-1.5 overflow-y-auto p-3">
-                {liveMessages.length === 0 && (
-                  <p className="px-1 pt-2 text-xs text-slate-500">
-                    Abhi koi activity nahi — “⚡ Abhi run karo” dabao ya 8 AM cron ka wait karo.
-                  </p>
+              <div className="flex items-center justify-between border-b border-white/10 px-4 py-2">
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setSideTab("activity")}
+                    className={`pb-1 text-[11px] font-bold uppercase tracking-widest transition-colors ${
+                      sideTab === "activity"
+                        ? "text-[#c4b5fd] border-b border-[#8b7cff]"
+                        : "text-slate-500 hover:text-slate-300"
+                    }`}
+                  >
+                    Activity
+                  </button>
+                  <button
+                    onClick={() => setSideTab("pipeline")}
+                    className={`pb-1 text-[11px] font-bold uppercase tracking-widest transition-colors ${
+                      sideTab === "pipeline"
+                        ? "text-[#c4b5fd] border-b border-[#8b7cff]"
+                        : "text-slate-500 hover:text-slate-300"
+                    }`}
+                  >
+                    Pipeline Flow
+                  </button>
+                </div>
+                {sideTab === "activity" && (
+                  <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#8b7cff]" style={{ animation: "mc-glow 1.4s infinite" }} />
+                    auto
+                  </span>
                 )}
-                {[...liveMessages].reverse().map((m) => {
-                  const meta = m.agent === "ceo" ? null : AGENT_META[m.agent as AgentNodeId];
-                  const color = m.agent === "ceo" ? "#c4b5fd" : STATUS_COLOR[m.status as NodeStatus] ?? "#8b7cff";
-                  return (
-                    <div
-                      key={m.id}
-                      className="rounded-lg border border-white/5 bg-white/[0.04] px-2.5 py-1.5 text-xs"
-                      style={{ borderLeft: `3px solid ${color}` }}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-bold text-slate-200">
-                          {m.agent === "ceo" ? "👑 CEO" : `${meta?.icon ?? ""} ${meta?.label ?? m.agent}`}
-                        </span>
-                        <span className="shrink-0 text-[10px] text-slate-500">{timeAgo(m.created_at)}</span>
-                      </div>
-                      <p className="mt-0.5 leading-snug text-slate-400">{m.message}</p>
-                    </div>
-                  );
-                })}
               </div>
+
+              {sideTab === "activity" ? (
+                <div className="flex-1 space-y-1.5 overflow-y-auto p-3">
+                  {liveMessages.length === 0 && (
+                    <p className="px-1 pt-2 text-xs text-slate-500">
+                      Abhi koi activity nahi — “⚡ Abhi run karo” dabao ya 8 AM cron ka wait karo.
+                    </p>
+                  )}
+                  {[...liveMessages].reverse().map((m) => {
+                    const meta = m.agent === "ceo" ? null : AGENT_META[m.agent as AgentNodeId];
+                    const color = m.agent === "ceo" ? "#c4b5fd" : STATUS_COLOR[m.status as NodeStatus] ?? "#8b7cff";
+                    return (
+                      <div
+                        key={m.id}
+                        className="rounded-lg border border-white/5 bg-white/[0.04] px-2.5 py-1.5 text-xs"
+                        style={{ borderLeft: `3px solid ${color}` }}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-slate-200">
+                            {m.agent === "ceo" ? "👑 CEO" : `${meta?.icon ?? ""} ${meta?.label ?? m.agent}`}
+                          </span>
+                          <span className="shrink-0 text-[10px] text-slate-500">{timeAgo(m.created_at)}</span>
+                        </div>
+                        <p className="mt-0.5 leading-snug text-slate-400">{m.message}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex-1 space-y-2.5 overflow-y-auto p-3">
+                  {v3?.pipelineSteps && v3.pipelineSteps.length > 0 ? (
+                    v3.pipelineSteps.map((s) => (
+                      <div key={s.id} className="rounded-lg border border-white/5 bg-white/[0.03] p-2.5 text-xs">
+                        <div className="flex items-center justify-between font-bold text-slate-200">
+                          <span>Order {s.step_order}: {s.agent_registry?.display_name || s.agent_key}</span>
+                          <span className={s.enabled ? "text-green-400" : "text-slate-500"}>
+                            {s.enabled ? "ON" : "OFF"}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          Key: <code className="text-[#a99df5]">{s.agent_key}</code>
+                        </p>
+                        {s.depends_on && s.depends_on.length > 0 && (
+                          <p className="mt-1 text-[11px] text-slate-400">
+                            Depends on: <span className="text-cyan-400">{s.depends_on.join(", ")}</span>
+                          </p>
+                        )}
+                        <p className="mt-1 text-[11px] text-slate-400 font-medium">
+                          Gate: <span className={s.is_blocking ? "text-red-400" : "text-amber-400"}>{s.is_blocking ? "blocking" : "non-blocking"}</span>
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="px-1 pt-2 text-xs text-slate-500">
+                      No pipeline steps loaded.
+                    </p>
+                  )}
+                </div>
+              )}
             </>
           )}
         </div>
